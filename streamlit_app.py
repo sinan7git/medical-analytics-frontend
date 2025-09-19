@@ -698,65 +698,65 @@ def location_analytics_tab():
                         available_locations
                     )
 
-                    location_frequency_threshold = st.slider(
-                        "Location Frequency Threshold",
-                        min_value=2,
-                        max_value=15,
-                        value=5,
-                        help="Questions asked this many times at a location are considered unique"
-                    )
+                    # location_frequency_threshold = st.slider(
+                    #     "Location Frequency Threshold",
+                    #     min_value=2,
+                    #     max_value=15,
+                    #     value=5,
+                    #     help="Questions asked this many times at a location are considered unique"
+                    # )
 
-                with col2:
-                    st.write("")  # Spacing
-                    if st.button("🔍 Analyze Location", type="primary"):
-                        with st.spinner(f"Analyzing {selected_location}..."):
-                            try:
-                                analysis_response = make_authenticated_request(
-                                    "/api/location/find-unique-questions",
-                                    "POST",
-                                    {
-                                        "location_name": selected_location,
-                                        "frequency_threshold": location_frequency_threshold
-                                    }
-                                )
-
-                                if analysis_response and analysis_response.status_code == 200:
-                                    result = analysis_response.json()
-                                    if result.get("status") == "success":
-                                        st.success(
-                                            f"✅ Found {result['unique_questions_found']} unique questions for {selected_location}!")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
-                                else:
-                                    st.error("Failed to run analysis")
-                            except Exception as e:
-                                st.error(f"Analysis error: {e}")
-
-                    if st.button("🔄 Analyze Top 15 Locations"):
-                        with st.spinner("Analyzing top locations..."):
-                            try:
-                                top_analysis_response = make_authenticated_request(
-                                    "/api/location/find-unique-questions-top",
-                                    "POST",
-                                    {
-                                        "top_n": 15,
-                                        "frequency_threshold": location_frequency_threshold
-                                    }
-                                )
-
-                                if top_analysis_response and top_analysis_response.status_code == 200:
-                                    result = top_analysis_response.json()
-                                    if result.get("status") == "success":
-                                        st.success(
-                                            f"✅ Analyzed {result['top_locations_processed']} locations, found {result['total_unique_questions_found']} unique questions!")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
-                                else:
-                                    st.error("Failed to run analysis")
-                            except Exception as e:
-                                st.error(f"Analysis error: {e}")
+                # with col2:
+                #     st.write("")  # Spacing
+                #     if st.button("🔍 Analyze Location", type="primary"):
+                #         with st.spinner(f"Analyzing {selected_location}..."):
+                #             try:
+                #                 analysis_response = make_authenticated_request(
+                #                     "/api/location/find-unique-questions",
+                #                     "POST",
+                #                     {
+                #                         "location_name": selected_location,
+                #                         "frequency_threshold": location_frequency_threshold
+                #                     }
+                #                 )
+                #
+                #                 if analysis_response and analysis_response.status_code == 200:
+                #                     result = analysis_response.json()
+                #                     if result.get("status") == "success":
+                #                         st.success(
+                #                             f"✅ Found {result['unique_questions_found']} unique questions for {selected_location}!")
+                #                         st.rerun()
+                #                     else:
+                #                         st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
+                #                 else:
+                #                     st.error("Failed to run analysis")
+                #             except Exception as e:
+                #                 st.error(f"Analysis error: {e}")
+                #
+                #     if st.button("🔄 Analyze Top 15 Locations"):
+                #         with st.spinner("Analyzing top locations..."):
+                #             try:
+                #                 top_analysis_response = make_authenticated_request(
+                #                     "/api/location/find-unique-questions-top",
+                #                     "POST",
+                #                     {
+                #                         "top_n": 15,
+                #                         "frequency_threshold": location_frequency_threshold
+                #                     }
+                #                 )
+                #
+                #                 if top_analysis_response and top_analysis_response.status_code == 200:
+                #                     result = top_analysis_response.json()
+                #                     if result.get("status") == "success":
+                #                         st.success(
+                #                             f"✅ Analyzed {result['top_locations_processed']} locations, found {result['total_unique_questions_found']} unique questions!")
+                #                         st.rerun()
+                #                     else:
+                #                         st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
+                #                 else:
+                #                     st.error("Failed to run analysis")
+                #             except Exception as e:
+                #                 st.error(f"Analysis error: {e}")
 
                 # Display unique questions for selected location
                 try:
