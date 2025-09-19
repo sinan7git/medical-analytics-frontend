@@ -1,4 +1,6 @@
 # streamlit_app.py - Enhanced Medical Call Analytics Frontend
+import time
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -19,6 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+
 # Initialize session state
 def init_session_state():
     if 'authenticated' not in st.session_state:
@@ -36,6 +39,7 @@ def init_session_state():
     if 'current_filters' not in st.session_state:
         st.session_state.current_filters = {}
 
+
 # Token validation
 def is_token_valid():
     if not st.session_state.access_token or not st.session_state.login_time:
@@ -44,16 +48,17 @@ def is_token_valid():
         return False
     return True
 
+
 def make_authenticated_request(endpoint, method="GET", data=None):
     headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
     url = f"{API_BASE_URL}{endpoint}"
-    
+
     try:
         if method == "GET":
             response = requests.get(url, headers=headers)
         elif method == "POST":
             response = requests.post(url, json=data, headers=headers)
-        
+
         if response.status_code == 401:
             st.session_state.authenticated = False
             st.session_state.access_token = None
@@ -63,40 +68,41 @@ def make_authenticated_request(endpoint, method="GET", data=None):
             st.error("Session expired. Please log in again.")
             st.rerun()
             return None
-        
+
         return response
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to the API server. Please make sure the FastAPI server is running.")
         return None
 
+
 def login_page():
     st.title("🏥 Medical Call Analytics System")
     st.markdown("---")
-    
+
     if is_token_valid() and st.session_state.access_token:
         response = make_authenticated_request("/health")
         if response and response.status_code == 200:
             st.session_state.authenticated = True
             st.rerun()
-    
+
     tab1, tab2 = st.tabs(["Login", "Register"])
-    
+
     with tab1:
         st.subheader("Login")
         username = st.text_input("Username", key="login_username")
         password = st.text_input("Password", type="password", key="login_password")
-        
+
         if st.button("Login", key="login_btn"):
             if not username or not password:
                 st.error("Please enter both username and password")
                 return
-                
+
             try:
                 response = requests.post(f"{API_BASE_URL}/api/auth/login", json={
                     "username": username,
                     "password": password
                 })
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     st.session_state.authenticated = True
@@ -104,7 +110,7 @@ def login_page():
                     st.session_state.user_role = data["role"]
                     st.session_state.username = username
                     st.session_state.login_time = datetime.now()
-                    
+
                     st.success("Login successful!")
                     st.rerun()
                 else:
@@ -112,19 +118,19 @@ def login_page():
                     st.error(f"Login failed: {error_detail}")
             except Exception as e:
                 st.error(f"Login failed: {e}")
-    
+
     with tab2:
         st.subheader("Register New User")
         reg_username = st.text_input("Username", key="reg_username")
         reg_email = st.text_input("Email", key="reg_email")
         reg_password = st.text_input("Password", type="password", key="reg_password")
         reg_role = st.selectbox("Role", ["manager"], key="reg_role")
-        
+
         if st.button("Register", key="register_btn"):
             if not all([reg_username, reg_email, reg_password]):
                 st.error("Please fill in all fields")
                 return
-                
+
             try:
                 response = requests.post(f"{API_BASE_URL}/api/auth/register", json={
                     "username": reg_username,
@@ -132,7 +138,7 @@ def login_page():
                     "password": reg_password,
                     "role": reg_role
                 })
-                
+
                 if response.status_code == 200:
                     st.success("Registration successful! Please login.")
                 else:
@@ -140,6 +146,7 @@ def login_page():
                     st.error(f"Registration failed: {error_detail}")
             except Exception as e:
                 st.error(f"Registration failed: {e}")
+
 
 def get_filter_options():
     """Get available filter options from API"""
@@ -163,12 +170,13 @@ def dashboard_page():
 
     # Main tabs
     if st.session_state.user_role == "manager":
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             "📊 Business Analytics",
             "🤖 AI Intelligence",
             "📋 Summary Reports",
             "📈 Executive Reports",
-            "❓ Q&A"
+            "❓ Q&A",
+            "🛠️ Q&A Service & Location"
         ])
 
         with tab1:
@@ -199,6 +207,8 @@ def dashboard_page():
 
             with qa_subtab3:
                 qa_insights_charts()
+        with tab6:
+            service_location_qa_management()
 
 
 
@@ -212,29 +222,617 @@ def dashboard_page():
         with tab2:
             enhanced_chat_section()
 
+
+def service_location_qa_management():
+    """Service & Location Q&A management section - Separate from original Q&A system"""
+    st.markdown("### 🛠️ Service & Location ")
+
+    st.markdown("---")
+
+    # Service & Location Analytics Tabs
+    service_tab, location_tab = st.tabs([
+        "🛠️ Service Analytics",
+        "📍 Location Analytics",
+    ])
+
+    with service_tab:
+        service_analytics_tab()
+
+    with location_tab:
+        location_analytics_tab()
+
+
+def system_management_tab():
+    """System management and maintenance tab"""
+    st.markdown("#### ⚙️ Service & Location System Management")
+
+    # System status overview
+    try:
+        migration_response = make_authenticated_request("/api/migration/status")
+        if migration_response and migration_response.status_code == 200:
+            migration_data = migration_response.json()
+
+            # System health check
+            st.markdown("##### 🏥 System Health")
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                service_records = migration_data["detailed_status"]["service_tables"]["total_records"]
+                st.metric("Service System Records", service_records)
+                if service_records > 0:
+                    st.success("✅ Service system healthy")
+                else:
+                    st.error("❌ Service system empty")
+
+            with col2:
+                location_records = migration_data["detailed_status"]["location_tables"]["total_records"]
+                st.metric("Location System Records", location_records)
+                if location_records > 0:
+                    st.success("✅ Location system healthy")
+                else:
+                    st.error("❌ Location system empty")
+
+            with col3:
+                consistency = migration_data["data_consistency"]
+                consistency_score = sum(consistency.values()) / len(consistency) * 100
+                st.metric("Data Consistency", f"{consistency_score:.0f}%")
+                if consistency_score >= 90:
+                    st.success("✅ Data consistent")
+                else:
+                    st.warning("⚠️ Data inconsistency detected")
+
+        else:
+            st.error("Cannot load system status")
+
+    except Exception as e:
+        st.error(f"System status error: {e}")
+
+    st.markdown("---")
+
+    # Management actions
+    st.markdown("##### 🔧 Management Actions")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**🔄 Data Management**")
+
+        if st.button("🔄 Refresh All Data", help="Repopulate service and location tables"):
+            with st.spinner("Refreshing all service and location data..."):
+                try:
+                    refresh_response = make_authenticated_request("/api/analytics/populate-all-tables", "POST")
+                    if refresh_response and refresh_response.status_code == 200:
+                        result = refresh_response.json()
+                        st.success("✅ Data refresh completed!")
+
+                        # Show refresh summary
+                        if result.get("status") == "success":
+                            summary = result.get("summary", {})
+                            st.write(f"📊 Service records: {summary.get('total_service_records_created', 0)}")
+                            st.write(f"📍 Location records: {summary.get('total_location_records_created', 0)}")
+                        st.rerun()
+                    else:
+                        st.error("❌ Data refresh failed")
+                except Exception as e:
+                    st.error(f"Refresh error: {e}")
+
+        if st.button("❓ Analyze All Unique Questions",
+                     help="Run unique question analysis for all services and locations"):
+            with st.spinner("Running comprehensive unique question analysis..."):
+                try:
+                    # Analyze services
+                    service_analysis = make_authenticated_request(
+                        "/api/service/find-unique-questions-all", "POST", {"frequency_threshold": 5}
+                    )
+
+                    # Analyze locations
+                    location_analysis = make_authenticated_request(
+                        "/api/location/find-unique-questions-top", "POST", {"top_n": 15, "frequency_threshold": 3}
+                    )
+
+                    service_success = service_analysis and service_analysis.status_code == 200
+                    location_success = location_analysis and location_analysis.status_code == 200
+
+                    if service_success and location_success:
+                        service_result = service_analysis.json()
+                        location_result = location_analysis.json()
+
+                        st.success("✅ Unique question analysis completed!")
+                        st.write(
+                            f"🛠️ Service unique questions: {service_result.get('total_unique_questions_found', 0)}")
+                        st.write(
+                            f"📍 Location unique questions: {location_result.get('total_unique_questions_found', 0)}")
+                        st.rerun()
+                    else:
+                        st.error("❌ Analysis failed - check individual service/location tabs for details")
+
+                except Exception as e:
+                    st.error(f"Analysis error: {e}")
+
+        if st.button("📥 Export System Data", help="Export all service and location data"):
+            try:
+                # Get comprehensive data
+                service_dashboard = make_authenticated_request("/api/service/dashboard")
+                location_dashboard = make_authenticated_request("/api/location/dashboard")
+                overview = make_authenticated_request("/api/analytics/service-location-overview")
+
+                if all(r and r.status_code == 200 for r in [service_dashboard, location_dashboard, overview]):
+                    export_data = {
+                        "export_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "system_type": "Service & Location Q&A Analytics",
+                        "service_dashboard": service_dashboard.json(),
+                        "location_dashboard": location_dashboard.json(),
+                        "system_overview": overview.json()
+                    }
+
+                    st.download_button(
+                        label="📥 Download Complete System Export",
+                        data=json.dumps(export_data, indent=2),
+                        file_name=f"service_location_system_export_{time.strftime('%Y%m%d_%H%M%S')}.json",
+                        mime="application/json"
+                    )
+                    st.success("✅ Export data prepared for download")
+                else:
+                    st.error("❌ Failed to prepare export data")
+            except Exception as e:
+                st.error(f"Export error: {e}")
+
+    with col2:
+        st.markdown("**🧹 System Cleanup**")
+
+        if st.button("🧹 Clean Old Company Data", help="Remove old company-based Q&A tables"):
+            if st.checkbox("⚠️ I confirm this will permanently delete old company data"):
+                with st.spinner("Cleaning up old company-based data..."):
+                    try:
+                        cleanup_response = make_authenticated_request("/api/cleanup/remove-company-tables", "POST")
+                        if cleanup_response and cleanup_response.status_code == 200:
+                            result = cleanup_response.json()
+                            st.success(
+                                f"✅ Cleanup completed! Removed {result.get('total_records_deleted', 0)} old records")
+
+                            # Show cleanup details
+                            cleanup_details = result.get("cleanup_results", {})
+                            for table_name, details in cleanup_details.items():
+                                if details.get("status") == "cleaned":
+                                    st.write(f"🗑️ {table_name}: {details['records_deleted']} records deleted")
+                        else:
+                            st.error("❌ Cleanup failed")
+                    except Exception as e:
+                        st.error(f"Cleanup error: {e}")
+
+        if st.button("🔍 Run System Diagnostics", help="Check system health and consistency"):
+            with st.spinner("Running system diagnostics..."):
+                try:
+                    # Run comprehensive diagnostics
+                    diagnostics = {}
+
+                    # Check migration status
+                    migration_check = make_authenticated_request("/api/migration/status")
+                    if migration_check and migration_check.status_code == 200:
+                        diagnostics["migration_status"] = migration_check.json()
+
+                    # Check service dashboard
+                    service_check = make_authenticated_request("/api/service/dashboard")
+                    if service_check and service_check.status_code == 200:
+                        diagnostics["service_health"] = "✅ Operational"
+                    else:
+                        diagnostics["service_health"] = "❌ Issues detected"
+
+                    # Check location dashboard
+                    location_check = make_authenticated_request("/api/location/dashboard")
+                    if location_check and location_check.status_code == 200:
+                        diagnostics["location_health"] = "✅ Operational"
+                    else:
+                        diagnostics["location_health"] = "❌ Issues detected"
+
+                    # Display diagnostics
+                    st.success("✅ Diagnostics completed")
+
+                    with st.expander("📋 Diagnostic Results", expanded=True):
+                        for key, value in diagnostics.items():
+                            if isinstance(value, dict):
+                                st.json({key: value})
+                            else:
+                                st.write(f"**{key.replace('_', ' ').title()}:** {value}")
+
+                except Exception as e:
+                    st.error(f"Diagnostics error: {e}")
+
+        st.markdown("**ℹ️ System Information**")
+        st.info("""
+        **Service & Location System:**
+        - 🛠️ 4 Service tables (Earwax, Children, Foreign Body, Infectious Discharge)
+        - 📍 41 Location tables (Baker St, Camden, Finsbury Park, etc.)
+        - 🔄 Independent from original Q&A system
+        - ❓ Separate unique question analysis per service/location
+        """)
+
+    st.markdown("---")
+
+    # Usage tips
+    st.markdown("##### 💡 Usage Tips")
+
+    with st.expander("📖 How to Use This System", expanded=False):
+        st.markdown("""
+        **🛠️ Service Analytics:**
+        - View questions specific to each medical service
+        - Identify service-specific training needs
+        - Create service-focused FAQs
+
+        **📍 Location Analytics:**
+        - See location-specific questions and issues
+        - Identify location training needs  
+        - Understand regional variations
+
+        **🔀 Combined Analysis:**
+        - Compare service vs location patterns
+        - Get cross-analytical insights
+        - Make strategic business decisions
+
+        **⚙️ Best Practices:**
+        - Run analysis monthly to catch new patterns
+        - Focus on high-frequency questions first
+        - Use both service and location insights for comprehensive training
+        - Export data regularly for reporting
+        """)
+
+
+def service_analytics_tab():
+    """Service-specific analytics tab"""
+    st.markdown("#### 🛠️ Service-Based Q&A Analysis")
+
+    # Get service dashboard data
+    try:
+        service_dashboard_response = make_authenticated_request("/api/service/dashboard")
+        if service_dashboard_response and service_dashboard_response.status_code == 200:
+            service_data = service_dashboard_response.json()
+
+            # Service overview metrics
+            st.markdown("##### 📊 Service Overview")
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.metric("Services Analyzed", service_data["overview"]["total_services"])
+            with col2:
+                st.metric("Total Q&A Pairs", service_data["overview"]["total_qa_pairs"])
+            with col3:
+                st.metric("Unique Questions", service_data["overview"]["total_unique_questions"])
+            with col4:
+                st.metric("Uniqueness Rate", f"{service_data['overview']['uniqueness_rate']}%")
+
+            # Service breakdown
+            st.markdown("##### 🔍 Service Breakdown")
+            services_data = service_data.get("services", {})
+
+            if services_data:
+                # Create service comparison table
+                service_comparison = []
+                for service_name, data in services_data.items():
+                    service_comparison.append({
+                        "Service": service_name,
+                        "Unique Questions": data["unique_questions_found"],
+                        "Uniqueness Rate": f"{(data['unique_questions_found'] / data['total_qa_pairs'] * 100):.1f}%" if
+                        data["total_qa_pairs"] > 0 else "0%",
+                        "Top Question": data["top_unique_question"]["question"][:50] + "..." if data[
+                                                                                                    "top_unique_question"] and
+                                                                                                data[
+                                                                                                    "top_unique_question"][
+                                                                                                    "question"] else "None"
+                    })
+
+                service_df = pd.DataFrame(service_comparison)
+                st.dataframe(service_df, use_container_width=True, hide_index=True)
+
+                # Service analysis controls
+                st.markdown("##### ⚙️ Service Analysis Controls")
+                col1, col2 = st.columns([2, 1])
+
+                with col1:
+                    selected_service = st.selectbox(
+                        "Select Service to Analyze",
+                        list(services_data.keys())
+                    )
+
+                    # frequency_threshold = st.slider(
+                    #     "Frequency Threshold",
+                    #     min_value=3,
+                    #     max_value=20,
+                    #     value=5,
+                    #     help="Questions asked this many times are considered unique"
+                    # )
+
+                # with col2:
+                #     st.write("")  # Spacing
+                #     if st.button("🔍 Analyze Service", type="primary"):
+                #         with st.spinner(f"Analyzing {selected_service}..."):
+                #             try:
+                #                 analysis_response = make_authenticated_request(
+                #                     "/api/service/find-unique-questions",
+                #                     "POST",
+                #                     {
+                #                         "service_name": selected_service,
+                #                         "frequency_threshold": frequency_threshold
+                #                     }
+                #                 )
+                #
+                #                 if analysis_response and analysis_response.status_code == 200:
+                #                     result = analysis_response.json()
+                #                     if result.get("status") == "success":
+                #                         st.success(f"✅ Found {result['unique_questions_found']} unique questions!")
+                #                         st.rerun()
+                #                     else:
+                #                         st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
+                #                 else:
+                #                     st.error("Failed to run analysis")
+                #             except Exception as e:
+                #                 st.error(f"Analysis error: {e}")
+                #
+                #     if st.button("🔄 Analyze All Services"):
+                #         with st.spinner("Analyzing all services..."):
+                #             try:
+                #                 all_analysis_response = make_authenticated_request(
+                #                     "/api/service/find-unique-questions-all",
+                #                     "POST",
+                #                     {"frequency_threshold": frequency_threshold}
+                #                 )
+                #
+                #                 if all_analysis_response and all_analysis_response.status_code == 200:
+                #                     result = all_analysis_response.json()
+                #                     if result.get("status") == "success":
+                #                         st.success(
+                #                             f"✅ Found {result['total_unique_questions_found']} total unique questions!")
+                #                         st.rerun()
+                #                     else:
+                #                         st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
+                #                 else:
+                #                     st.error("Failed to run analysis")
+                #             except Exception as e:
+                #                 st.error(f"Analysis error: {e}")
+
+                # Display unique questions for selected service
+                try:
+                    service_questions_response = make_authenticated_request(
+                        f"/api/service/unique-questions/{selected_service}")
+
+                    if service_questions_response and service_questions_response.status_code == 200:
+                        service_questions_data = service_questions_response.json()
+                        unique_questions = service_questions_data.get("unique_questions", [])
+
+                        if unique_questions:
+                            st.markdown(
+                                f"##### ❓ Unique Questions for {selected_service} ({len(unique_questions)} found)")
+
+                            for i, uq in enumerate(unique_questions, 1):  # Show top 5
+                                impact_colors = {"high": "🔴", "medium": "🟡", "low": "🟢", "minimal": "⚪"}
+                                impact_icon = impact_colors.get(uq["business_impact"], "⚪")
+
+                                with st.expander(
+                                        f"{impact_icon} {uq['canonical_question'][:60]}... (Asked {uq['frequency_count']} times)"):
+                                    col1, col2 = st.columns([3, 1])
+
+                                    with col1:
+                                        st.markdown(f"**🔍 Question:** {uq['canonical_question']}")
+                                        st.markdown(f"**💬 Answer:** {uq['canonical_answer']}")
+                                        st.markdown(f"**📂 Category:** {uq['category']}")
+
+                                    with col2:
+                                        st.metric("Frequency", uq['frequency_count'])
+                                        st.metric("Priority", f"{uq['priority_score']:.1f}")
+                                        st.write(f"**Impact:** {uq['business_impact'].title()}")
+
+                                    st.info(f"💡 **Action:** {uq['recommended_action']}")
+                        else:
+                            st.info(f"No unique questions found for {selected_service}")
+                    else:
+                        st.error("Failed to load service questions")
+
+                except Exception as e:
+                    st.error(f"Error loading service questions: {e}")
+            else:
+                st.info("No service data available. Run service analysis first.")
+
+        else:
+            st.error("Failed to load service dashboard")
+
+    except Exception as e:
+        st.error(f"Error loading service analytics: {e}")
+
+
+def location_analytics_tab():
+    """Location-specific analytics tab"""
+    st.markdown("#### 📍 Location-Based Q&A Analysis")
+
+    # Get location dashboard data
+    try:
+        location_dashboard_response = make_authenticated_request("/api/location/dashboard")
+        if location_dashboard_response and location_dashboard_response.status_code == 200:
+            location_data = location_dashboard_response.json()
+
+            # Location overview metrics
+            st.markdown("##### 📊 Location Overview")
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.metric("Total Locations", location_data["overview"]["total_locations_available"])
+            with col2:
+                st.metric("Locations with Data", location_data["overview"]["locations_with_data"])
+            with col3:
+                st.metric("Total Q&A Pairs", location_data["overview"]["total_qa_pairs"])
+            with col4:
+                st.metric("Unique Questions", location_data["overview"]["total_unique_questions"])
+
+            # Top locations display
+            st.markdown("##### 🏆 Top Performing Locations")
+            top_locations = location_data.get("top_locations", {})
+
+            if top_locations:
+                # Create location comparison table
+                location_comparison = []
+                for location_name, data in list(top_locations.items())[:10]:  # Top 10
+                    location_comparison.append({
+                        "Location": location_name,
+                        "Unique Questions": data["unique_questions_found"],
+                        "Uniqueness Rate": f"{(data['unique_questions_found'] / data['total_qa_pairs'] * 100):.1f}%" if
+                        data["total_qa_pairs"] > 0 else "0%",
+                        "Top Question": data["top_unique_question"]["question"][:40] + "..." if data[
+                                                                                                    "top_unique_question"] and
+                                                                                                data[
+                                                                                                    "top_unique_question"][
+                                                                                                    "question"] else "None"
+                    })
+
+                location_df = pd.DataFrame(location_comparison)
+                st.dataframe(location_df, use_container_width=True, hide_index=True)
+
+                # Location analysis controls
+                st.markdown("##### ⚙️ Location Analysis Controls")
+
+                # Get available locations
+                available_locations = list(top_locations.keys())
+
+                col1, col2 = st.columns([2, 1])
+
+                with col1:
+                    selected_location = st.selectbox(
+                        "Select Location to Analyze",
+                        available_locations
+                    )
+
+                    location_frequency_threshold = st.slider(
+                        "Location Frequency Threshold",
+                        min_value=2,
+                        max_value=15,
+                        value=5,
+                        help="Questions asked this many times at a location are considered unique"
+                    )
+
+                with col2:
+                    st.write("")  # Spacing
+                    if st.button("🔍 Analyze Location", type="primary"):
+                        with st.spinner(f"Analyzing {selected_location}..."):
+                            try:
+                                analysis_response = make_authenticated_request(
+                                    "/api/location/find-unique-questions",
+                                    "POST",
+                                    {
+                                        "location_name": selected_location,
+                                        "frequency_threshold": location_frequency_threshold
+                                    }
+                                )
+
+                                if analysis_response and analysis_response.status_code == 200:
+                                    result = analysis_response.json()
+                                    if result.get("status") == "success":
+                                        st.success(
+                                            f"✅ Found {result['unique_questions_found']} unique questions for {selected_location}!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
+                                else:
+                                    st.error("Failed to run analysis")
+                            except Exception as e:
+                                st.error(f"Analysis error: {e}")
+
+                    if st.button("🔄 Analyze Top 15 Locations"):
+                        with st.spinner("Analyzing top locations..."):
+                            try:
+                                top_analysis_response = make_authenticated_request(
+                                    "/api/location/find-unique-questions-top",
+                                    "POST",
+                                    {
+                                        "top_n": 15,
+                                        "frequency_threshold": location_frequency_threshold
+                                    }
+                                )
+
+                                if top_analysis_response and top_analysis_response.status_code == 200:
+                                    result = top_analysis_response.json()
+                                    if result.get("status") == "success":
+                                        st.success(
+                                            f"✅ Analyzed {result['top_locations_processed']} locations, found {result['total_unique_questions_found']} unique questions!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
+                                else:
+                                    st.error("Failed to run analysis")
+                            except Exception as e:
+                                st.error(f"Analysis error: {e}")
+
+                # Display unique questions for selected location
+                try:
+                    location_questions_response = make_authenticated_request(
+                        f"/api/location/unique-questions/{selected_location}")
+
+                    if location_questions_response and location_questions_response.status_code == 200:
+                        location_questions_data = location_questions_response.json()
+                        unique_questions = location_questions_data.get("unique_questions", [])
+
+                        if unique_questions:
+                            st.markdown(
+                                f"##### ❓ Unique Questions for {selected_location} ({len(unique_questions)} found)")
+
+                            for i, uq in enumerate(unique_questions, 1):  # Show top 5
+                                impact_colors = {"high": "🔴", "medium": "🟡", "low": "🟢", "minimal": "⚪"}
+                                impact_icon = impact_colors.get(uq["business_impact"], "⚪")
+
+                                with st.expander(
+                                        f"{impact_icon} {uq['canonical_question'][:60]}... (Asked {uq['frequency_count']} times)"):
+                                    col1, col2 = st.columns([3, 1])
+
+                                    with col1:
+                                        st.markdown(f"**🔍 Question:** {uq['canonical_question']}")
+                                        st.markdown(f"**💬 Answer:** {uq['canonical_answer']}")
+                                        st.markdown(f"**📂 Category:** {uq['category']}")
+
+                                    with col2:
+                                        st.metric("Frequency", uq['frequency_count'])
+                                        st.metric("Priority", f"{uq['priority_score']:.1f}")
+                                        st.write(f"**Impact:** {uq['business_impact'].title()}")
+                                        if uq.get('services_mentioned'):
+                                            st.write(f"**Services:** {', '.join(uq['services_mentioned'][:2])}")
+
+                                    st.info(f"💡 **Action:** {uq['recommended_action']}")
+                        else:
+                            st.info(f"No unique questions found for {selected_location}")
+                    else:
+                        st.error("Failed to load location questions")
+
+                except Exception as e:
+                    st.error(f"Error loading location questions: {e}")
+            else:
+                st.info("No location data available. Run location analysis first.")
+
+        else:
+            st.error("Failed to load location dashboard")
+
+    except Exception as e:
+        st.error(f"Error loading location analytics: {e}")
+
+
 def enhanced_analytics_section():
     """Enhanced analytics dashboard for managers"""
     st.subheader("📊 Business Intelligence Dashboard")
-    
+
     # Get filter options
     filter_options = get_filter_options()
-    
+
     # Filters Section
     st.markdown("### 🔍 Filters")
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         date_from = st.date_input("From Date", datetime.now() - timedelta(days=30), key="date_from")
-        
+
     with col2:
         date_to = st.date_input("To Date", datetime.now(), key="date_to")
-    
+
     with col3:
-        clinic_location = st.selectbox("Clinic Location", ["All"] + filter_options.get("locations", []), key="location_filter")
-        
+        clinic_location = st.selectbox("Clinic Location", ["All"] + filter_options.get("locations", []),
+                                       key="location_filter")
+
     with col4:
         service_type = st.selectbox("Service Type", ["All"] + filter_options.get("services", []), key="service_filter")
-    
+
     col5, col6, col7 = st.columns(3)
     with col5:
         category = st.selectbox("Category", ["All"] + filter_options.get("categories", []), key="category_filter")
@@ -243,7 +841,7 @@ def enhanced_analytics_section():
     with col7:
         st.write("")  # Spacing
         apply_filters = st.button("Apply Filters 🔍", use_container_width=True)
-    
+
     # Build filters object
     filters = {
         "date_from": str(date_from),
@@ -253,15 +851,15 @@ def enhanced_analytics_section():
         "category": category if category != "All" else None,
         "time_frame": time_frame
     }
-    
+
     # Update session filters
     st.session_state.current_filters = filters
-    
+
     st.markdown("---")
-    
+
     # Main Dashboard Table
     st.markdown("### 📋 Time & Business Outcome Breakdown")
-    
+
     try:
         response = make_authenticated_request("/api/analytics/time-breakdown", "POST", filters)
         if response and response.status_code == 200:
@@ -269,7 +867,7 @@ def enhanced_analytics_section():
             breakdown = data["breakdown"]
             totals = data["totals"]
             total_calls = data["total_calls"]
-            
+
             if total_calls > 0:
                 # Create the breakdown table
                 df_data = []
@@ -284,21 +882,21 @@ def enhanced_analytics_section():
                             "Cancelled": metrics["Cancelled"],
                             "Other": metrics["Other"]
                         })
-                
+
                 # Add totals row
                 df_data.append({
                     "Day": "**TOTALS**",
                     "Morning": totals["Morning"],
-                    "Afternoon": totals["Afternoon"], 
+                    "Afternoon": totals["Afternoon"],
                     "Evening": totals["Evening"],
                     "Didn't Book": totals["Didn't Book"],
                     "Cancelled": totals["Cancelled"],
                     "Other": totals["Other"]
                 })
-                
+
                 df = pd.DataFrame(df_data)
                 st.dataframe(df, use_container_width=True, hide_index=True)
-                
+
                 # Quick Stats Cards
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
@@ -318,57 +916,58 @@ def enhanced_analytics_section():
             st.error("Failed to load analytics data")
     except Exception as e:
         st.error(f"Error loading analytics: {e}")
-    
+
     st.markdown("---")
-    
+
     # Summary Statistics
     st.markdown("### 📈 Key Performance Insights")
-    
+
     try:
         response = make_authenticated_request("/api/analytics/summary-stats", "POST", filters)
         if response and response.status_code == 200:
             stats = response.json()
             print(f"this is the summary : {stats}")
-            
+
             if stats["total_calls"] > 0:
                 col1, col2 = st.columns(2)
-                
+
                 with col1:
                     st.markdown("**📊 Peak Patterns:**")
                     st.write(f"• Peak Day: **{stats['peak_day']}**")
                     st.write(f"• Peak Time: **{stats['peak_time']}**")
                     st.write(f"• Top Location: **{stats['top_location']}**")
                     st.write(f"• Top Service: **{stats['top_service']}**")
-                
+
                 with col2:
                     st.markdown("**⚠️ Business Metrics:**")
                     st.write(f"• Cancellation Rate: **{stats['cancellation_rate']}%**")
                     st.write(f"• No Booking Rate: **{stats['no_booking_rate']}%**")
-                    
+
                     if stats['cancellation_rate'] > 25:
                         st.warning("High cancellation rate detected!")
                     if stats['no_booking_rate'] > 30:
                         st.warning("High booking loss rate detected!")
-                
+
                 # Outcome Breakdown Chart
                 if stats.get('outcome_breakdown'):
-                    outcome_df = pd.DataFrame(list(stats['outcome_breakdown'].items()), 
-                                            columns=['Outcome', 'Count'])
-                    fig = px.pie(outcome_df, values='Count', names='Outcome', 
-                               title="Business Outcomes Distribution")
+                    outcome_df = pd.DataFrame(list(stats['outcome_breakdown'].items()),
+                                              columns=['Outcome', 'Count'])
+                    fig = px.pie(outcome_df, values='Count', names='Outcome',
+                                 title="Business Outcomes Distribution")
                     st.plotly_chart(fig, use_container_width=True)
         else:
             st.error("Failed to load summary statistics")
     except Exception as e:
         st.error(f"Error loading summary stats: {e}")
 
+
 def basic_insights_section():
     """Basic insights for receptionists"""
     st.subheader("📞 Call Insights & Patterns")
-    
+
     # Simple metrics that are helpful for receptionists
     st.info("View general call patterns and get insights to help with customer service.")
-    
+
     try:
         # Show basic location data
         response = make_authenticated_request("/api/analytics/calls-by-location")
@@ -383,23 +982,24 @@ def basic_insights_section():
     except Exception as e:
         st.error(f"Error loading data: {e}")
 
+
 def enhanced_chat_section():
     """Enhanced chat section with filter integration"""
     st.subheader("🤖 AI Business Intelligence Assistant")
-    
+
     # Show current filters if any
     if st.session_state.current_filters:
         with st.expander("📋 Current Filters Applied", expanded=False):
             filters = st.session_state.current_filters
             st.json(filters)
             st.info("The AI will analyze data based on these filters when you ask questions.")
-    
+
     # Role-specific guidance
     if st.session_state.user_role == "manager":
         st.info("💼 Manager Mode: Ask about business performance, trends, and strategic insights.")
         example_queries = [
             "What's happening with our call performance?",
-            "Why are we seeing so many cancellations?", 
+            "Why are we seeing so many cancellations?",
             "What patterns do you see in Monday morning calls?",
             "How is Finsbury Park location performing?",
             "What's causing customers to book elsewhere?",
@@ -419,7 +1019,7 @@ def enhanced_chat_section():
             "How to handle refund requests?",
             "Tips for reducing no-shows?"
         ]
-    
+
     # Example queries
     st.markdown("**💡 Try asking:**")
     cols = st.columns(2)
@@ -428,9 +1028,9 @@ def enhanced_chat_section():
             if st.button(query, key=f"example_{i}", use_container_width=True):
                 st.session_state.chat_input_value = query
                 st.rerun()
-    
+
     st.markdown("---")
-    
+
     # Chat history display
     if st.session_state.chat_history:
         with st.container():
@@ -441,18 +1041,18 @@ def enhanced_chat_section():
                 else:
                     st.markdown(f"**🤖 AI Assistant:** {message}")
                 st.markdown("---")
-    
+
     # Chat input
     if 'chat_input_value' not in st.session_state:
         st.session_state.chat_input_value = ""
-    
+
     user_query = st.text_area(
         "Ask me anything about the medical calls:",
         value=st.session_state.chat_input_value,
         height=100,
         placeholder="e.g., What's causing our high Monday morning cancellation rate?"
     )
-    
+
     col1, col2 = st.columns([1, 4])
     with col1:
         send_button = st.button("Send 📤", use_container_width=True)
@@ -460,21 +1060,21 @@ def enhanced_chat_section():
             st.session_state.chat_history = []
             st.session_state.chat_input_value = ""
             st.rerun()
-    
+
     if send_button and user_query.strip():
         # Add user message
         st.session_state.chat_history.append(("user", user_query))
-        
+
         # Prepare chat request with filters
         chat_data = {
             "message": user_query,
             "filters": st.session_state.current_filters
         }
-        
+
         try:
             with st.spinner("🤔 Analyzing your request..."):
                 response = make_authenticated_request("/api/chat", "POST", chat_data)
-                
+
                 if response and response.status_code == 200:
                     ai_response = response.json()["response"]
                     st.session_state.chat_history.append(("assistant", ai_response))
@@ -485,51 +1085,52 @@ def enhanced_chat_section():
         except Exception as e:
             st.error(f"Error: {e}")
 
+
 def executive_reports_section():
     """Executive reports for managers"""
     st.subheader("📈 Executive Reports & Analytics")
-    
+
     st.markdown("### 📊 Generate Business Reports")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         report_date_from = st.date_input("Report From Date", datetime.now() - timedelta(days=30))
     with col2:
         report_date_to = st.date_input("Report To Date", datetime.now())
-    
+
     report_type = st.selectbox(
         "Report Type",
         ["Executive Summary", "Location Performance", "Service Analysis", "Trend Analysis", "Competitive Analysis"]
     )
-    
+
     if st.button("Generate Executive Report", use_container_width=True):
         filters = {
             "date_from": str(report_date_from),
             "date_to": str(report_date_to)
         }
-        
+
         try:
             # Get comprehensive data
             breakdown_response = make_authenticated_request("/api/analytics/time-breakdown", "POST", filters)
             stats_response = make_authenticated_request("/api/analytics/summary-stats", "POST", filters)
-            
+
             if breakdown_response and stats_response:
                 breakdown_data = breakdown_response.json()
                 stats_data = stats_response.json()
-                
+
                 st.success(f"✅ {report_type} Generated Successfully")
-                
+
                 # Executive Summary
                 st.markdown(f"### 📋 {report_type}")
                 st.markdown(f"**Report Period:** {report_date_from} to {report_date_to}")
-                
+
                 # Key Metrics
                 st.markdown("#### 🎯 Key Performance Indicators")
                 col1, col2, col3, col4 = st.columns(4)
-                
+
                 total_calls = breakdown_data["total_calls"]
                 totals = breakdown_data["totals"]
-                
+
                 with col1:
                     st.metric("Total Calls", total_calls)
                 with col2:
@@ -541,46 +1142,50 @@ def executive_reports_section():
                 with col4:
                     success_rate = round((totals["Other"] / total_calls) * 100, 1) if total_calls > 0 else 0
                     st.metric("Success Rate", f"{success_rate}%")
-                
+
                 # Business Insights
                 st.markdown("#### 📈 Business Insights")
                 insights = []
-                
+
                 if cancel_rate > 25:
-                    insights.append(f"🚨 **High Cancellation Rate**: {cancel_rate}% is above recommended threshold of 25%")
-                
+                    insights.append(
+                        f"🚨 **High Cancellation Rate**: {cancel_rate}% is above recommended threshold of 25%")
+
                 if lost_rate > 30:
-                    insights.append(f"⚠️ **High Lost Booking Rate**: {lost_rate}% indicates availability or competitive issues")
-                
+                    insights.append(
+                        f"⚠️ **High Lost Booking Rate**: {lost_rate}% indicates availability or competitive issues")
+
                 if stats_data.get("peak_day"):
-                    insights.append(f"📊 **Peak Activity**: {stats_data['peak_day']} {stats_data['peak_time']} shows highest call volume")
-                
+                    insights.append(
+                        f"📊 **Peak Activity**: {stats_data['peak_day']} {stats_data['peak_time']} shows highest call volume")
+
                 if totals["Morning"] > totals["Afternoon"] * 1.5:
-                    insights.append("⏰ **Morning Peak**: Strong preference for morning appointments suggests capacity optimization opportunity")
-                
+                    insights.append(
+                        "⏰ **Morning Peak**: Strong preference for morning appointments suggests capacity optimization opportunity")
+
                 for insight in insights:
                     st.markdown(insight)
-                
+
                 # Recommendations
                 st.markdown("#### 🎯 Strategic Recommendations")
                 recommendations = []
-                
+
                 if cancel_rate > 25:
                     recommendations.append("1. Implement reminder call system to reduce cancellations")
                     recommendations.append("2. Review cancellation policy and introduce flexibility measures")
-                
+
                 if lost_rate > 20:
                     recommendations.append("3. Expand appointment availability during peak demand periods")
                     recommendations.append("4. Conduct competitive analysis for pricing and service offerings")
-                
+
                 if totals["Morning"] > totals["Afternoon"] * 1.3:
                     recommendations.append("5. Consider expanding morning capacity at high-demand locations")
-                
+
                 recommendations.append("6. Implement customer feedback system to identify improvement areas")
-                
+
                 for rec in recommendations:
                     st.markdown(rec)
-                
+
                 # Download capability
                 report_data = {
                     "report_type": report_type,
@@ -592,7 +1197,7 @@ def executive_reports_section():
                     "insights": insights,
                     "recommendations": recommendations
                 }
-                
+
                 st.download_button(
                     "Download Report Data 📁",
                     data=json.dumps(report_data, indent=2),
@@ -1257,6 +1862,7 @@ def qa_insights_charts():
     except Exception as e:
         st.error(f"Error creating charts: {e}")
 
+
 # Helper functions for displaying summaries
 
 def display_daily_summary(result):
@@ -1440,23 +2046,26 @@ def check_server_connection():
     except:
         return False
 
+
 def main():
     init_session_state()
-    
+
     if not check_server_connection():
-        st.error("🚫 Cannot connect to the API server. Please make sure the FastAPI server is running on https://medical-call-analytics-api.onrender.com")
+        st.error(
+            "🚫 Cannot connect to the API server. Please make sure the FastAPI server is running on https://medical-call-analytics-api.onrender.com")
         st.info("To start the server, run: `python main.py`")
         return
-    
+
     if not st.session_state.authenticated and is_token_valid() and st.session_state.access_token:
         response = make_authenticated_request("/health")
         if response and response.status_code == 200:
             st.session_state.authenticated = True
-    
+
     if not st.session_state.authenticated:
         login_page()
     else:
         dashboard_page()
+
 
 if __name__ == "__main__":
     main()
