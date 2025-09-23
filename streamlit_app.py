@@ -1,12 +1,13 @@
 # streamlit_app.py - Enhanced Medical Call Analytics Frontend
 import time
 
+import numpy as np
 import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
 from collections import defaultdict
 
@@ -240,241 +241,6 @@ def service_location_qa_management():
 
     with location_tab:
         location_analytics_tab()
-
-
-def system_management_tab():
-    """System management and maintenance tab"""
-    st.markdown("#### ⚙️ Service & Location System Management")
-
-    # System status overview
-    try:
-        migration_response = make_authenticated_request("/api/migration/status")
-        if migration_response and migration_response.status_code == 200:
-            migration_data = migration_response.json()
-
-            # System health check
-            st.markdown("##### 🏥 System Health")
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                service_records = migration_data["detailed_status"]["service_tables"]["total_records"]
-                st.metric("Service System Records", service_records)
-                if service_records > 0:
-                    st.success("✅ Service system healthy")
-                else:
-                    st.error("❌ Service system empty")
-
-            with col2:
-                location_records = migration_data["detailed_status"]["location_tables"]["total_records"]
-                st.metric("Location System Records", location_records)
-                if location_records > 0:
-                    st.success("✅ Location system healthy")
-                else:
-                    st.error("❌ Location system empty")
-
-            with col3:
-                consistency = migration_data["data_consistency"]
-                consistency_score = sum(consistency.values()) / len(consistency) * 100
-                st.metric("Data Consistency", f"{consistency_score:.0f}%")
-                if consistency_score >= 90:
-                    st.success("✅ Data consistent")
-                else:
-                    st.warning("⚠️ Data inconsistency detected")
-
-        else:
-            st.error("Cannot load system status")
-
-    except Exception as e:
-        st.error(f"System status error: {e}")
-
-    st.markdown("---")
-
-    # Management actions
-    st.markdown("##### 🔧 Management Actions")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("**🔄 Data Management**")
-
-        if st.button("🔄 Refresh All Data", help="Repopulate service and location tables"):
-            with st.spinner("Refreshing all service and location data..."):
-                try:
-                    refresh_response = make_authenticated_request("/api/analytics/populate-all-tables", "POST")
-                    if refresh_response and refresh_response.status_code == 200:
-                        result = refresh_response.json()
-                        st.success("✅ Data refresh completed!")
-
-                        # Show refresh summary
-                        if result.get("status") == "success":
-                            summary = result.get("summary", {})
-                            st.write(f"📊 Service records: {summary.get('total_service_records_created', 0)}")
-                            st.write(f"📍 Location records: {summary.get('total_location_records_created', 0)}")
-                        st.rerun()
-                    else:
-                        st.error("❌ Data refresh failed")
-                except Exception as e:
-                    st.error(f"Refresh error: {e}")
-
-        if st.button("❓ Analyze All Unique Questions",
-                     help="Run unique question analysis for all services and locations"):
-            with st.spinner("Running comprehensive unique question analysis..."):
-                try:
-                    # Analyze services
-                    service_analysis = make_authenticated_request(
-                        "/api/service/find-unique-questions-all", "POST", {"frequency_threshold": 5}
-                    )
-
-                    # Analyze locations
-                    location_analysis = make_authenticated_request(
-                        "/api/location/find-unique-questions-top", "POST", {"top_n": 15, "frequency_threshold": 3}
-                    )
-
-                    service_success = service_analysis and service_analysis.status_code == 200
-                    location_success = location_analysis and location_analysis.status_code == 200
-
-                    if service_success and location_success:
-                        service_result = service_analysis.json()
-                        location_result = location_analysis.json()
-
-                        st.success("✅ Unique question analysis completed!")
-                        st.write(
-                            f"🛠️ Service unique questions: {service_result.get('total_unique_questions_found', 0)}")
-                        st.write(
-                            f"📍 Location unique questions: {location_result.get('total_unique_questions_found', 0)}")
-                        st.rerun()
-                    else:
-                        st.error("❌ Analysis failed - check individual service/location tabs for details")
-
-                except Exception as e:
-                    st.error(f"Analysis error: {e}")
-
-        if st.button("📥 Export System Data", help="Export all service and location data"):
-            try:
-                # Get comprehensive data
-                service_dashboard = make_authenticated_request("/api/service/dashboard")
-                location_dashboard = make_authenticated_request("/api/location/dashboard")
-                overview = make_authenticated_request("/api/analytics/service-location-overview")
-
-                if all(r and r.status_code == 200 for r in [service_dashboard, location_dashboard, overview]):
-                    export_data = {
-                        "export_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                        "system_type": "Service & Location Q&A Analytics",
-                        "service_dashboard": service_dashboard.json(),
-                        "location_dashboard": location_dashboard.json(),
-                        "system_overview": overview.json()
-                    }
-
-                    st.download_button(
-                        label="📥 Download Complete System Export",
-                        data=json.dumps(export_data, indent=2),
-                        file_name=f"service_location_system_export_{time.strftime('%Y%m%d_%H%M%S')}.json",
-                        mime="application/json"
-                    )
-                    st.success("✅ Export data prepared for download")
-                else:
-                    st.error("❌ Failed to prepare export data")
-            except Exception as e:
-                st.error(f"Export error: {e}")
-
-    with col2:
-        st.markdown("**🧹 System Cleanup**")
-
-        if st.button("🧹 Clean Old Company Data", help="Remove old company-based Q&A tables"):
-            if st.checkbox("⚠️ I confirm this will permanently delete old company data"):
-                with st.spinner("Cleaning up old company-based data..."):
-                    try:
-                        cleanup_response = make_authenticated_request("/api/cleanup/remove-company-tables", "POST")
-                        if cleanup_response and cleanup_response.status_code == 200:
-                            result = cleanup_response.json()
-                            st.success(
-                                f"✅ Cleanup completed! Removed {result.get('total_records_deleted', 0)} old records")
-
-                            # Show cleanup details
-                            cleanup_details = result.get("cleanup_results", {})
-                            for table_name, details in cleanup_details.items():
-                                if details.get("status") == "cleaned":
-                                    st.write(f"🗑️ {table_name}: {details['records_deleted']} records deleted")
-                        else:
-                            st.error("❌ Cleanup failed")
-                    except Exception as e:
-                        st.error(f"Cleanup error: {e}")
-
-        if st.button("🔍 Run System Diagnostics", help="Check system health and consistency"):
-            with st.spinner("Running system diagnostics..."):
-                try:
-                    # Run comprehensive diagnostics
-                    diagnostics = {}
-
-                    # Check migration status
-                    migration_check = make_authenticated_request("/api/migration/status")
-                    if migration_check and migration_check.status_code == 200:
-                        diagnostics["migration_status"] = migration_check.json()
-
-                    # Check service dashboard
-                    service_check = make_authenticated_request("/api/service/dashboard")
-                    if service_check and service_check.status_code == 200:
-                        diagnostics["service_health"] = "✅ Operational"
-                    else:
-                        diagnostics["service_health"] = "❌ Issues detected"
-
-                    # Check location dashboard
-                    location_check = make_authenticated_request("/api/location/dashboard")
-                    if location_check and location_check.status_code == 200:
-                        diagnostics["location_health"] = "✅ Operational"
-                    else:
-                        diagnostics["location_health"] = "❌ Issues detected"
-
-                    # Display diagnostics
-                    st.success("✅ Diagnostics completed")
-
-                    with st.expander("📋 Diagnostic Results", expanded=True):
-                        for key, value in diagnostics.items():
-                            if isinstance(value, dict):
-                                st.json({key: value})
-                            else:
-                                st.write(f"**{key.replace('_', ' ').title()}:** {value}")
-
-                except Exception as e:
-                    st.error(f"Diagnostics error: {e}")
-
-        st.markdown("**ℹ️ System Information**")
-        st.info("""
-        **Service & Location System:**
-        - 🛠️ 4 Service tables (Earwax, Children, Foreign Body, Infectious Discharge)
-        - 📍 41 Location tables (Baker St, Camden, Finsbury Park, etc.)
-        - 🔄 Independent from original Q&A system
-        - ❓ Separate unique question analysis per service/location
-        """)
-
-    st.markdown("---")
-
-    # Usage tips
-    st.markdown("##### 💡 Usage Tips")
-
-    with st.expander("📖 How to Use This System", expanded=False):
-        st.markdown("""
-        **🛠️ Service Analytics:**
-        - View questions specific to each medical service
-        - Identify service-specific training needs
-        - Create service-focused FAQs
-
-        **📍 Location Analytics:**
-        - See location-specific questions and issues
-        - Identify location training needs  
-        - Understand regional variations
-
-        **🔀 Combined Analysis:**
-        - Compare service vs location patterns
-        - Get cross-analytical insights
-        - Make strategic business decisions
-
-        **⚙️ Best Practices:**
-        - Run analysis monthly to catch new patterns
-        - Focus on high-frequency questions first
-        - Use both service and location insights for comprehensive training
-        - Export data regularly for reporting
-        """)
 
 
 def service_analytics_tab():
@@ -813,23 +579,19 @@ def enhanced_analytics_section():
     """Enhanced analytics dashboard for managers"""
     st.subheader("📊 Business Intelligence Dashboard")
 
-    # Get filter options
+    # Filters
     filter_options = get_filter_options()
-
-    # Filters Section
     st.markdown("### 🔍 Filters")
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        date_from = st.date_input("From Date", datetime.now() - timedelta(days=30), key="date_from")
-
+        default_from_date = date(2025, 4, 30)
+        date_from = st.date_input("From Date", default_from_date, key="date_from")
     with col2:
         date_to = st.date_input("To Date", datetime.now(), key="date_to")
-
     with col3:
         clinic_location = st.selectbox("Clinic Location", ["All"] + filter_options.get("locations", []),
                                        key="location_filter")
-
     with col4:
         service_type = st.selectbox("Service Type", ["All"] + filter_options.get("services", []), key="service_filter")
 
@@ -839,10 +601,9 @@ def enhanced_analytics_section():
     with col6:
         time_frame = st.selectbox("Time Frame", filter_options.get("time_frames", ["week"]), key="time_frame")
     with col7:
-        st.write("")  # Spacing
+        st.write("")
         apply_filters = st.button("Apply Filters 🔍", use_container_width=True)
 
-    # Build filters object
     filters = {
         "date_from": str(date_from),
         "date_to": str(date_to),
@@ -851,13 +612,30 @@ def enhanced_analytics_section():
         "category": category if category != "All" else None,
         "time_frame": time_frame
     }
-
-    # Update session filters
     st.session_state.current_filters = filters
 
     st.markdown("---")
 
-    # Main Dashboard Table
+    # Tabs
+    analytics_tab1, analytics_tab2, analytics_tab3, analytics_tab4 = st.tabs([
+        "📈 Core Analytics",
+        "🚀 Same-Day Demand",
+        "🎯 Location Strategy",
+        "🗺️ Service & Geographic"
+    ])
+
+    with analytics_tab1:
+        core_analytics_section(filters)
+    with analytics_tab2:
+        same_day_demand_section(filters)
+    with analytics_tab3:
+        location_insights_section(filters)
+    with analytics_tab4:
+        geographic_analysis_section(filters)
+
+
+def core_analytics_section(filters):
+    """Core analytics: time & business outcomes + summary"""
     st.markdown("### 📋 Time & Business Outcome Breakdown")
 
     try:
@@ -869,10 +647,10 @@ def enhanced_analytics_section():
             total_calls = data["total_calls"]
 
             if total_calls > 0:
-                # Create the breakdown table
+                # Table
                 df_data = []
                 for day, metrics in breakdown.items():
-                    if metrics["Morning"] + metrics["Afternoon"] + metrics["Evening"] > 0:  # Only show days with calls
+                    if metrics["Morning"] + metrics["Afternoon"] + metrics["Evening"] > 0:
                         df_data.append({
                             "Day": day,
                             "Morning": metrics["Morning"],
@@ -882,8 +660,6 @@ def enhanced_analytics_section():
                             "Cancelled": metrics["Cancelled"],
                             "Other": metrics["Other"]
                         })
-
-                # Add totals row
                 df_data.append({
                     "Day": "**TOTALS**",
                     "Morning": totals["Morning"],
@@ -902,16 +678,16 @@ def enhanced_analytics_section():
                 with col1:
                     st.metric("Total Calls", total_calls)
                 with col2:
-                    cancel_rate = round((totals["Cancelled"] / total_calls) * 100, 1) if total_calls > 0 else 0
+                    cancel_rate = round((totals["Cancelled"] / total_calls) * 100, 1)
                     st.metric("Cancellation Rate", f"{cancel_rate}%")
                 with col3:
-                    lost_rate = round((totals["Didn't Book"] / total_calls) * 100, 1) if total_calls > 0 else 0
+                    lost_rate = round((totals["Didn't Book"] / total_calls) * 100, 1)
                     st.metric("Lost Booking Rate", f"{lost_rate}%")
                 with col4:
-                    success_rate = round((totals["Other"] / total_calls) * 100, 1) if total_calls > 0 else 0
+                    success_rate = round((totals["Other"] / total_calls) * 100, 1)
                     st.metric("Success Rate", f"{success_rate}%")
             else:
-                st.info("No data available for the selected filters. Try adjusting your date range or filters.")
+                st.info("No data available for the selected filters.")
         else:
             st.error("Failed to load analytics data")
     except Exception as e:
@@ -930,7 +706,6 @@ def enhanced_analytics_section():
 
             if stats["total_calls"] > 0:
                 col1, col2 = st.columns(2)
-
                 with col1:
                     st.markdown("**📊 Peak Patterns:**")
                     st.write(f"• Peak Day: **{stats['peak_day']}**")
@@ -959,6 +734,336 @@ def enhanced_analytics_section():
             st.error("Failed to load summary statistics")
     except Exception as e:
         st.error(f"Error loading summary stats: {e}")
+
+
+def same_day_demand_section(filters):
+    """Same-day booking demand analysis"""
+    st.markdown("### 🚀 Same-Day Booking Demand")
+
+    try:
+        response = make_authenticated_request("/api/analytics/same-day-demand", "POST", filters)
+        if response and response.status_code == 200:
+            data = response.json()
+            same_day_data = data["same_day_analysis"]
+
+            # Key Metrics Row
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Same-Day Requests", same_day_data["total_same_day_requests"])
+            with col2:
+                if same_day_data["clinic_breakdown"]:
+                    avg_success = np.mean(
+                        [clinic["success_rate"] for clinic in same_day_data["clinic_breakdown"].values()])
+                    st.metric("Average Success Rate", f"{avg_success:.1f}%")
+                else:
+                    st.metric("Average Success Rate", "0%")
+            with col3:
+                total_lost = sum(
+                    [clinic["lost_opportunities"] for clinic in same_day_data["clinic_breakdown"].values()])
+                st.metric("Lost Opportunities", total_lost)
+
+            # Main Visualization: Demand vs Success Rate
+            if same_day_data["top_demanded_clinics"]:
+                clinic_names = [item[0] for item in same_day_data["top_demanded_clinics"][:10]]
+                total_requests = [item[1]["total_requests"] for item in same_day_data["top_demanded_clinics"][:10]]
+                success_rates = [item[1]["success_rate"] for item in same_day_data["top_demanded_clinics"][:10]]
+
+                fig = go.Figure()
+
+                # Bar chart for total requests
+                fig.add_trace(go.Bar(
+                    name="Total Same-Day Requests",
+                    x=clinic_names,
+                    y=total_requests,
+                    yaxis="y",
+                    marker_color="lightblue",
+                    text=total_requests,
+                    textposition="outside"
+                ))
+
+                # Line chart for success rates
+                fig.add_trace(go.Scatter(
+                    name="Success Rate %",
+                    x=clinic_names,
+                    y=success_rates,
+                    yaxis="y2",
+                    mode="lines+markers",
+                    marker_color="red",
+                    line=dict(width=3)
+                ))
+
+                fig.update_layout(
+                    title="Same-Day Demand vs Success Rate by Clinic",
+                    xaxis_title="Clinic Location",
+                    yaxis=dict(title="Total Same-Day Requests", side="left"),
+                    yaxis2=dict(title="Success Rate %", side="right", overlaying="y", range=[0, 100]),
+                    height=500,
+                    hovermode="x unified"
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Data Table
+                st.markdown("#### 📋 Same-Day Performance by Clinic")
+                table_data = []
+                for clinic, stats in same_day_data["clinic_breakdown"].items():
+                    table_data.append({
+                        "Clinic": clinic,
+                        "Same-Day Requests": stats["total_requests"],
+                        "Successful": stats["successful_bookings"],
+                        "Lost": stats["lost_opportunities"],
+                        "Success Rate": f"{stats['success_rate']}%"
+                    })
+
+                df = pd.DataFrame(table_data)
+                st.dataframe(df, use_container_width=True)
+
+            # Actionable Recommendations
+            # if data.get("recommendations"):
+            #     st.markdown("#### 💡 Same-Day Demand Recommendations")
+            #     for rec in data["recommendations"]:
+            #         if "⚠️" in rec:
+            #             st.warning(rec)
+            #         else:
+            #             st.success(rec)
+        else:
+            st.error("Failed to load same-day demand data")
+    except Exception as e:
+        st.error(f"Error loading same-day analysis: {e}")
+
+
+def location_insights_section(filters):
+    st.markdown("### 🎯 Location Strategy & Customer Loyalty")
+
+    try:
+        response = make_authenticated_request("/api/analytics/location-exclusivity", "POST", filters)
+        if response and response.status_code == 200:
+            data = response.json()
+            exclusivity_data = data["location_exclusivity_analysis"]
+            insights = data["insights"]
+
+            if exclusivity_data:
+                # Key Insights Metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Exclusive Customers", insights["total_exclusive_customers"])
+                with col2:
+                    if insights["most_exclusive_demand"]:
+                        most_demanded = insights["most_exclusive_demand"]
+                        st.metric("Highest Exclusive Demand",
+                                  f"{most_demanded[0]}")
+                        st.caption(f"{most_demanded[1]['exclusive_requests']} customers")
+                with col3:
+                    if insights["lowest_conversion"]:
+                        lowest_conv = insights["lowest_conversion"]
+                        st.metric("Needs Attention",
+                                  f"{lowest_conv[0]}")
+                        st.caption(f"{lowest_conv[1]['conversion_rate']}% conversion")
+
+                # Create DataFrame for visualization
+                df_data = []
+                for clinic, stats in exclusivity_data.items():
+                    df_data.append({
+                        "Clinic": clinic,
+                        "Exclusive Requests": stats["exclusive_requests"],
+                        "Successful Bookings": stats["successful_bookings"],
+                        "Lost Opportunities": stats["lost_due_to_unavailability"],
+                        "Conversion Rate": stats["conversion_rate"]
+                    })
+
+                df = pd.DataFrame(df_data)
+
+                # Scatter Plot: Demand vs Conversion with Lost Opportunities as bubble size
+                fig = px.scatter(df,
+                                 x="Exclusive Requests",
+                                 y="Conversion Rate",
+                                 size="Lost Opportunities",
+                                 hover_name="Clinic",
+                                 title="Location Exclusivity: Demand vs Conversion Rate",
+                                 labels={
+                                     "Exclusive Requests": "Customers Who Only Want This Clinic",
+                                     "Conversion Rate": "Conversion Rate (%)"
+                                 },
+                                 color="Conversion Rate",
+                                 color_continuous_scale="RdYlGn")
+
+                # Add reference lines
+                # fig.add_hline(y=70, line_dash="dash", line_color="green",
+                #             annotation_text="Good Conversion (70%)")
+                # fig.add_hline(y=50, line_dash="dash", line_color="orange",
+                #             annotation_text="Poor Conversion (50%)")
+
+                fig.update_layout(height=500)
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Detailed Data Table
+                st.markdown("#### 📊 Location Exclusivity Analysis")
+                st.dataframe(df, use_container_width=True)
+
+                # Strategic Insights
+                st.markdown("#### 🎯 Strategic Insights")
+                high_demand_low_conversion = df[(df["Exclusive Requests"] > 10) & (df["Conversion Rate"] < 60)]
+                if not high_demand_low_conversion.empty:
+                    st.warning("🚨 **Capacity Issues Detected:**")
+                    for _, row in high_demand_low_conversion.iterrows():
+                        st.write(
+                            f"• **{row['Clinic']}**: {row['Exclusive Requests']} exclusive customers but only {row['Conversion Rate']}% conversion - urgent capacity expansion needed")
+
+                high_loyalty = df[df["Conversion Rate"] > 80]
+                if not high_loyalty.empty:
+                    st.success("⭐ **High Loyalty Locations:**")
+                    for _, row in high_loyalty.iterrows():
+                        st.write(
+                            f"• **{row['Clinic']}**: {row['Conversion Rate']}% conversion rate - excellent customer satisfaction")
+            else:
+                st.info("No location exclusivity data found for the selected period.")
+        else:
+            st.error("Failed to load location strategy data")
+    except Exception as e:
+        st.error(f"Error loading location analysis: {e}")
+
+
+def geographic_analysis_section(filters):
+    """Service gaps and geographic analysis"""
+    st.markdown("### 🗺️ Service Gaps & Geographic Intelligence")
+
+    # Two-column layout for service gaps and geographic data
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 🚫 Why Appointments Weren't Booked")
+
+        try:
+            response = make_authenticated_request("/api/analytics/no-booking-reasons", "POST", filters)
+            if response and response.status_code == 200:
+                no_booking_data = response.json()
+                reason_breakdown = no_booking_data["no_booking_analysis"]["reason_breakdown"]
+
+                if reason_breakdown:
+                    # Create pie chart of reasons
+                    reasons = []
+                    counts = []
+                    colors = []
+
+                    color_map = {
+                        "service_not_offered": "#FF6B6B",
+                        "credential_requirements": "#4ECDC4",
+                        "no_nearby_clinics": "#45B7D1",
+                        "clinic_unavailable": "#FFA500",
+                        "wrong_company": "#95A5A6",
+                        "unspecified": "#E74C3C"
+                    }
+
+                    for reason, data in reason_breakdown.items():
+                        if data["count"] > 0:
+                            reasons.append(reason.replace('_', ' ').title())
+                            counts.append(data["count"])
+                            colors.append(color_map.get(reason, "#95A5A6"))
+
+                    fig = go.Figure(data=[go.Pie(
+                        labels=reasons,
+                        values=counts,
+                        marker_colors=colors,
+                        textinfo='label+percent',
+                        hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>'
+                    )])
+
+                    fig.update_layout(title="No Booking Reasons", height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    # Service gap details
+                    # service_gaps = reason_breakdown.get("service_not_offered", {})
+                    # if service_gaps.get("requested_services"):
+                    #     st.markdown("**🔍 Most Requested Services We Don't Offer:**")
+                    #     for service, count in list(service_gaps["requested_services"].items())[:5]:
+                    #         st.write(f"• {service}: {count} requests")
+
+                # Actionable insights
+                # if no_booking_data.get("actionable_insights"):
+                #     st.markdown("**💡 Key Insights:**")
+                #     for insight in no_booking_data["actionable_insights"]:
+                #         st.info(insight)
+
+        except Exception as e:
+            st.error(f"Error loading service gap analysis: {e}")
+
+    with col2:
+        st.markdown("#### 📍 Geographic Demand Patterns")
+
+        try:
+            response = make_authenticated_request("/api/analytics/geographic-demand", "POST", filters)
+            if response and response.status_code == 200:
+                geo_data = response.json()
+                geographic_analysis = geo_data["geographic_analysis"]
+
+                # Key metrics
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.metric("Unique Postcodes", len(geographic_analysis["postcode_demand"]))
+                    st.metric("Coverage Gaps", len(geographic_analysis["coverage_gaps"]))
+                with col_b:
+                    st.metric("Areas Mentioned", len(geographic_analysis["area_demand"]))
+                    st.metric("Calls with Location", geo_data["total_calls_with_location_data"])
+
+                # Top postcodes chart
+                if geographic_analysis["top_postcodes"]:
+                    postcode_df = pd.DataFrame(
+                        geographic_analysis["top_postcodes"][:8],
+                        columns=["Postcode", "Calls"]
+                    )
+                    fig = px.bar(postcode_df, x="Postcode", y="Calls",
+                                 title="Top Postcode Areas",
+                                 color="Calls", color_continuous_scale="Blues")
+                    fig.update_layout(height=300, showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Expansion opportunities
+                if geographic_analysis["expansion_opportunities"]:
+                    st.markdown("**🚀 Expansion Opportunities:**")
+                    for area, demand in geographic_analysis["expansion_opportunities"][:5]:
+                        st.write(f"• **{area}**: {demand} requests (we don't serve)")
+
+        except Exception as e:
+            st.error(f"Error loading geographic analysis: {e}")
+
+    # Full-width detailed breakdown
+    st.markdown("---")
+    st.markdown("#### 📋 Detailed No-Booking Analysis")
+
+    try:
+        response = make_authenticated_request("/api/analytics/no-booking-reasons", "POST", filters)
+        if response and response.status_code == 200:
+            no_booking_data = response.json()
+            reason_breakdown = no_booking_data["no_booking_analysis"]["reason_breakdown"]
+
+            # Expandable sections for each reason
+            for reason, data in reason_breakdown.items():
+                if data["count"] > 0:
+                    with st.expander(
+                            f"{reason.replace('_', ' ').title()} - {data['count']} cases ({data['percentage']}%)"):
+
+                        col1, col2, col3 = st.columns(3)
+
+                        with col1:
+                            if data["requested_services"]:
+                                st.markdown("**Services Requested:**")
+                                for service, count in data["requested_services"].items():
+                                    st.write(f"• {service}: {count}x")
+
+                        with col2:
+                            if data["credential_requirements"]:
+                                st.markdown("**Credential Requirements:**")
+                                for cred, count in data["credential_requirements"].items():
+                                    st.write(f"• {cred}: {count}x")
+
+                        with col3:
+                            if data["examples"]:
+                                st.markdown("**Examples:**")
+                                for example in data["examples"]:
+                                    st.write(f"• {example['date']}: {example['summary']}")
+
+    except Exception as e:
+        st.error(f"Error loading detailed breakdown: {e}")
 
 
 def basic_insights_section():
