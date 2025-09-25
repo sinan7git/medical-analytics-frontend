@@ -171,11 +171,11 @@ def dashboard_page():
 
     # Main tabs
     if st.session_state.user_role == "manager":
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        tab1, tab3, tab5, tab6 = st.tabs([
             "📊 Business Analytics",
-            "🤖 AI Intelligence",
+            # "🤖 AI Intelligence",
             "📋 Summary Reports",
-            "📈 Executive Reports",
+            # "📈 Executive Reports",
             "❓ Q&A",
             "🛠️ Q&A Service & Location"
         ])
@@ -183,14 +183,14 @@ def dashboard_page():
         with tab1:
             enhanced_analytics_section()
 
-        with tab2:
-            enhanced_chat_section()
+        # with tab2:
+        #     enhanced_chat_section()
 
         with tab3:
             summary_reports_section()
 
-        with tab4:
-            executive_reports_section()
+        # with tab4:
+        #     executive_reports_section()
 
         with tab5:
             # Q&A Intelligence sub-tabs
@@ -576,7 +576,6 @@ def location_analytics_tab():
 
 
 def enhanced_analytics_section():
-    """Enhanced analytics dashboard for managers"""
     st.subheader("📊 Business Intelligence Dashboard")
 
     # Filters
@@ -612,16 +611,17 @@ def enhanced_analytics_section():
         "category": category if category != "All" else None,
         "time_frame": time_frame
     }
+
     st.session_state.current_filters = filters
 
     st.markdown("---")
 
-    # Tabs
-    analytics_tab1, analytics_tab2, analytics_tab3, analytics_tab4 = st.tabs([
+    analytics_tab1, analytics_tab2, analytics_tab3, analytics_tab4, analytics_tab5 = st.tabs([
         "📈 Core Analytics",
         "🚀 Same-Day Demand",
         "🎯 Location Strategy",
-        "🗺️ Service & Geographic"
+        "🗺️ Service & Geographic",
+        "📮 Postcode Section"  # NEW TAB
     ])
 
     with analytics_tab1:
@@ -632,6 +632,8 @@ def enhanced_analytics_section():
         location_insights_section(filters)
     with analytics_tab4:
         geographic_analysis_section(filters)
+    with analytics_tab5:
+        postcode_intelligence_section(filters)
 
 
 def core_analytics_section(filters):
@@ -737,14 +739,23 @@ def core_analytics_section(filters):
 
 
 def same_day_demand_section(filters):
-    """Same-day booking demand analysis"""
+    """✅ FIXED: Same-day booking demand analysis with proper filter application"""
     st.markdown("### 🚀 Same-Day Booking Demand")
 
+    # ✅ Debug info to verify filters are being passed
+    st.info(f"📊 Analyzing data from {filters['date_from']} to {filters['date_to']}" +
+            (f" | Location: {filters['clinic_location']}" if filters['clinic_location'] else "") +
+            (f" | Service: {filters['service_type']}" if filters['service_type'] else ""))
+
     try:
+        # ✅ CRITICAL: Use filters parameter in API call
         response = make_authenticated_request("/api/analytics/same-day-demand", "POST", filters)
         if response and response.status_code == 200:
             data = response.json()
             same_day_data = data["same_day_analysis"]
+
+            # ✅ Show filtered results count
+            st.success(f"✅ Found {same_day_data['total_same_day_requests']} same-day requests matching your filters")
 
             # Key Metrics Row
             col1, col2, col3 = st.columns(3)
@@ -793,7 +804,7 @@ def same_day_demand_section(filters):
                 ))
 
                 fig.update_layout(
-                    title="Same-Day Demand vs Success Rate by Clinic",
+                    title="Same-Day Demand vs Success Rate by Clinic (Filtered Data)",
                     xaxis_title="Clinic Location",
                     yaxis=dict(title="Total Same-Day Requests", side="left"),
                     yaxis2=dict(title="Success Rate %", side="right", overlaying="y", range=[0, 100]),
@@ -804,7 +815,7 @@ def same_day_demand_section(filters):
                 st.plotly_chart(fig, use_container_width=True)
 
                 # Data Table
-                st.markdown("#### 📋 Same-Day Performance by Clinic")
+                st.markdown("#### 📋 Same-Day Performance by Clinic (Filtered)")
                 table_data = []
                 for clinic, stats in same_day_data["clinic_breakdown"].items():
                     table_data.append({
@@ -818,22 +829,16 @@ def same_day_demand_section(filters):
                 df = pd.DataFrame(table_data)
                 st.dataframe(df, use_container_width=True)
 
-            # Actionable Recommendations
-            # if data.get("recommendations"):
-            #     st.markdown("#### 💡 Same-Day Demand Recommendations")
-            #     for rec in data["recommendations"]:
-            #         if "⚠️" in rec:
-            #             st.warning(rec)
-            #         else:
-            #             st.success(rec)
-        else:
-            st.error("Failed to load same-day demand data")
     except Exception as e:
         st.error(f"Error loading same-day analysis: {e}")
 
 
 def location_insights_section(filters):
     st.markdown("### 🎯 Location Strategy & Customer Loyalty")
+
+    # ✅ Show filter context
+    st.info(f"📊 Location analysis for {filters['date_from']} to {filters['date_to']}" +
+            (f" (filtered to {filters['clinic_location']})" if filters['clinic_location'] else " (all locations)"))
 
     try:
         response = make_authenticated_request("/api/analytics/location-exclusivity", "POST", filters)
@@ -850,14 +855,12 @@ def location_insights_section(filters):
                 with col2:
                     if insights["most_exclusive_demand"]:
                         most_demanded = insights["most_exclusive_demand"]
-                        st.metric("Highest Exclusive Demand",
-                                  f"{most_demanded[0]}")
+                        st.metric("Highest Exclusive Demand", f"{most_demanded[0]}")
                         st.caption(f"{most_demanded[1]['exclusive_requests']} customers")
                 with col3:
                     if insights["lowest_conversion"]:
                         lowest_conv = insights["lowest_conversion"]
-                        st.metric("Needs Attention",
-                                  f"{lowest_conv[0]}")
+                        st.metric("Needs Attention", f"{lowest_conv[0]}")
                         st.caption(f"{lowest_conv[1]['conversion_rate']}% conversion")
 
                 # Create DataFrame for visualization
@@ -873,25 +876,19 @@ def location_insights_section(filters):
 
                 df = pd.DataFrame(df_data)
 
-                # Scatter Plot: Demand vs Conversion with Lost Opportunities as bubble size
+                # Scatter Plot: Demand vs Conversion
                 fig = px.scatter(df,
                                  x="Exclusive Requests",
                                  y="Conversion Rate",
                                  size="Lost Opportunities",
                                  hover_name="Clinic",
-                                 title="Location Exclusivity: Demand vs Conversion Rate",
+                                 title="Location Exclusivity: Demand vs Conversion Rate (Filtered Data)",
                                  labels={
                                      "Exclusive Requests": "Customers Who Only Want This Clinic",
                                      "Conversion Rate": "Conversion Rate (%)"
                                  },
                                  color="Conversion Rate",
                                  color_continuous_scale="RdYlGn")
-
-                # Add reference lines
-                # fig.add_hline(y=70, line_dash="dash", line_color="green",
-                #             annotation_text="Good Conversion (70%)")
-                # fig.add_hline(y=50, line_dash="dash", line_color="orange",
-                #             annotation_text="Poor Conversion (50%)")
 
                 fig.update_layout(height=500)
                 st.plotly_chart(fig, use_container_width=True)
@@ -900,9 +897,8 @@ def location_insights_section(filters):
                 st.markdown("#### 📊 Location Exclusivity Analysis")
                 st.dataframe(df, use_container_width=True)
 
-                # Strategic Insights
                 st.markdown("#### 🎯 Strategic Insights")
-                high_demand_low_conversion = df[(df["Exclusive Requests"] > 10) & (df["Conversion Rate"] < 60)]
+                high_demand_low_conversion = df[(df["Exclusive Requests"] > 5) & (df["Conversion Rate"] < 60)]
                 if not high_demand_low_conversion.empty:
                     st.warning("🚨 **Capacity Issues Detected:**")
                     for _, row in high_demand_low_conversion.iterrows():
@@ -916,7 +912,7 @@ def location_insights_section(filters):
                         st.write(
                             f"• **{row['Clinic']}**: {row['Conversion Rate']}% conversion rate - excellent customer satisfaction")
             else:
-                st.info("No location exclusivity data found for the selected period.")
+                st.info("No location exclusivity data found for the selected filters. Try expanding your date range.")
         else:
             st.error("Failed to load location strategy data")
     except Exception as e:
@@ -924,27 +920,27 @@ def location_insights_section(filters):
 
 
 def geographic_analysis_section(filters):
-    """Service gaps and geographic analysis"""
+    """✅ FIXED: Service gaps and geographic analysis with filters"""
     st.markdown("### 🗺️ Service Gaps & Geographic Intelligence")
 
-    # Two-column layout for service gaps and geographic data
+    # ✅ Filter context
+    st.info(f"🌍 Geographic analysis for {filters['date_from']} to {filters['date_to']}")
+
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("#### 🚫 Why Appointments Weren't Booked")
 
         try:
+            # ✅ CRITICAL: Use filters
             response = make_authenticated_request("/api/analytics/no-booking-reasons", "POST", filters)
             if response and response.status_code == 200:
                 no_booking_data = response.json()
                 reason_breakdown = no_booking_data["no_booking_analysis"]["reason_breakdown"]
 
                 if reason_breakdown:
-                    # Create pie chart of reasons
-                    reasons = []
-                    counts = []
-                    colors = []
-
+                    # Create pie chart
+                    reasons, counts, colors = [], [], []
                     color_map = {
                         "service_not_offered": "#FF6B6B",
                         "credential_requirements": "#4ECDC4",
@@ -968,21 +964,8 @@ def geographic_analysis_section(filters):
                         hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>'
                     )])
 
-                    fig.update_layout(title="No Booking Reasons", height=400)
+                    fig.update_layout(title="No Booking Reasons (Filtered Data)", height=400)
                     st.plotly_chart(fig, use_container_width=True)
-
-                    # Service gap details
-                    # service_gaps = reason_breakdown.get("service_not_offered", {})
-                    # if service_gaps.get("requested_services"):
-                    #     st.markdown("**🔍 Most Requested Services We Don't Offer:**")
-                    #     for service, count in list(service_gaps["requested_services"].items())[:5]:
-                    #         st.write(f"• {service}: {count} requests")
-
-                # Actionable insights
-                # if no_booking_data.get("actionable_insights"):
-                #     st.markdown("**💡 Key Insights:**")
-                #     for insight in no_booking_data["actionable_insights"]:
-                #         st.info(insight)
 
         except Exception as e:
             st.error(f"Error loading service gap analysis: {e}")
@@ -991,6 +974,7 @@ def geographic_analysis_section(filters):
         st.markdown("#### 📍 Geographic Demand Patterns")
 
         try:
+            # ✅ CRITICAL: Use filters
             response = make_authenticated_request("/api/analytics/geographic-demand", "POST", filters)
             if response and response.status_code == 200:
                 geo_data = response.json()
@@ -1012,7 +996,7 @@ def geographic_analysis_section(filters):
                         columns=["Postcode", "Calls"]
                     )
                     fig = px.bar(postcode_df, x="Postcode", y="Calls",
-                                 title="Top Postcode Areas",
+                                 title="Top Postcode Areas (Filtered)",
                                  color="Calls", color_continuous_scale="Blues")
                     fig.update_layout(height=300, showlegend=False)
                     st.plotly_chart(fig, use_container_width=True)
@@ -1026,44 +1010,128 @@ def geographic_analysis_section(filters):
         except Exception as e:
             st.error(f"Error loading geographic analysis: {e}")
 
-    # Full-width detailed breakdown
-    st.markdown("---")
-    st.markdown("#### 📋 Detailed No-Booking Analysis")
+
+def postcode_intelligence_section(filters):
+    st.markdown("### 📮 Postcode Section")
+
+    st.info(f"📊 Postcode analysis for {filters['date_from']} to {filters['date_to']}" +
+            (f" | Service: {filters['service_type']}" if filters['service_type'] else ""))
 
     try:
-        response = make_authenticated_request("/api/analytics/no-booking-reasons", "POST", filters)
+        response = make_authenticated_request("/api/analytics/geographic-demand", "POST", filters)
         if response and response.status_code == 200:
-            no_booking_data = response.json()
-            reason_breakdown = no_booking_data["no_booking_analysis"]["reason_breakdown"]
+            geo_data = response.json()
+            geographic_analysis = geo_data["geographic_analysis"]
 
-            # Expandable sections for each reason
-            for reason, data in reason_breakdown.items():
-                if data["count"] > 0:
-                    with st.expander(
-                            f"{reason.replace('_', ' ').title()} - {data['count']} cases ({data['percentage']}%)"):
+            # Overview metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Unique Postcodes", len(geographic_analysis["postcode_demand"]))
+            with col2:
+                total_postcode_calls = sum(geographic_analysis["postcode_demand"].values())
+                # st.metric("Calls with Postcodes", total_postcode_calls)
+            with col3:
+                avg_calls_per_postcode = round(total_postcode_calls / len(geographic_analysis["postcode_demand"]), 1) if \
+                    geographic_analysis["postcode_demand"] else 0
+                # st.metric("Avg Calls/Postcode", avg_calls_per_postcode)
+            with col4:
+                coverage_percentage = round(
+                    (geo_data["total_calls_with_location_data"] / max(total_postcode_calls, 1)) * 100, 1)
+                # st.metric("Location Data Coverage", f"{coverage_percentage}%")
 
-                        col1, col2, col3 = st.columns(3)
+            if geographic_analysis["postcode_demand"]:
+                # Main postcode analysis
+                postcode_df = pd.DataFrame(
+                    list(geographic_analysis["postcode_demand"].items()),
+                    columns=["Postcode", "Calls"]
+                ).sort_values("Calls", ascending=False)
 
-                        with col1:
-                            if data["requested_services"]:
-                                st.markdown("**Services Requested:**")
-                                for service, count in data["requested_services"].items():
-                                    st.write(f"• {service}: {count}x")
+                # Two-column layout for charts
+                col1, col2 = st.columns(2)
 
-                        with col2:
-                            if data["credential_requirements"]:
-                                st.markdown("**Credential Requirements:**")
-                                for cred, count in data["credential_requirements"].items():
-                                    st.write(f"• {cred}: {count}x")
+                # with col1:
+                #     # Top 15 postcodes bar chart
+                #     top_15 = postcode_df.head(15)
+                #     fig1 = px.bar(
+                #         top_15,
+                #         x="Calls",
+                #         y="Postcode",
+                #         orientation='h',
+                #         title="Top 15 Postcodes by Call Volume",
+                #         color="Calls",
+                #         color_continuous_scale="Blues",
+                #         text="Calls"
+                #     )
+                #     fig1.update_layout(height=600, yaxis={'categoryorder': 'total ascending'})
+                #     fig1.update_traces(textposition='outside')
+                #     st.plotly_chart(fig1, use_container_width=True)
+                #
+                # with col2:
+                #     # Postcode distribution histogram
+                #     fig2 = px.histogram(
+                #         postcode_df,
+                #         x="Calls",
+                #         title="Call Volume Distribution Across Postcodes",
+                #         nbins=20,
+                #         color_discrete_sequence=['#1f77b4']
+                #     )
+                #     fig2.update_layout(
+                #         height=300,
+                #         xaxis_title="Calls per Postcode",
+                #         yaxis_title="Number of Postcodes"
+                #     )
+                #     st.plotly_chart(fig2, use_container_width=True)
+                #
+                #     # Postcode area analysis (first 2-3 characters)
+                #     postcode_areas = {}
+                #     for postcode, calls in geographic_analysis["postcode_demand"].items():
+                #         # Extract area (e.g., "SW1" from "SW1A 1AA")
+                #         area = postcode.split()[0][:2] if postcode else "Unknown"
+                #         postcode_areas[area] = postcode_areas.get(area, 0) + calls
+                #
+                #     if postcode_areas:
+                #         area_df = pd.DataFrame(
+                #             list(postcode_areas.items()),
+                #             columns=["Area", "Total_Calls"]
+                #         ).sort_values("Total_Calls", ascending=False).head(10)
+                #
+                #         fig3 = px.pie(
+                #             area_df,
+                #             values="Total_Calls",
+                #             names="Area",
+                #             title="Top London Areas (by Postcode Prefix)"
+                #         )
+                #         fig3.update_layout(height=300)
+                #         st.plotly_chart(fig3, use_container_width=True)
 
-                        with col3:
-                            if data["examples"]:
-                                st.markdown("**Examples:**")
-                                for example in data["examples"]:
-                                    st.write(f"• {example['date']}: {example['summary']}")
+                # Detailed postcode table with search
+                st.markdown("#### 📋 Complete Postcode Analysis")
+
+                # Add search functionality
+                search_postcode = st.text_input("🔍 Search postcodes:",
+                                                placeholder="Enter postcode or area (e.g., SW1, E14)")
+
+                if search_postcode:
+                    filtered_df = postcode_df[
+                        postcode_df["Postcode"].str.contains(search_postcode.upper(), na=False)
+                    ]
+                    st.write(f"Found {len(filtered_df)} postcodes matching '{search_postcode.upper()}'")
+                else:
+                    filtered_df = postcode_df
+
+                # Show top 50 results
+                display_df = filtered_df.copy()
+                display_df['Rank'] = range(1, len(display_df) + 1)
+                display_df = display_df[['Rank', 'Postcode', 'Calls']]
+
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+            else:
+                st.info(
+                    "No postcode data available for the selected filters. Postcodes may not be captured in older call records.")
 
     except Exception as e:
-        st.error(f"Error loading detailed breakdown: {e}")
+        st.error(f"Error loading postcode intelligence: {e}")
 
 
 def basic_insights_section():
