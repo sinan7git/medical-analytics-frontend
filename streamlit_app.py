@@ -12,7 +12,7 @@ import json
 from collections import defaultdict
 
 # Configuration
-API_BASE_URL = "https://medical-call-analytics-api.onrender.com"
+API_BASE_URL = "http://localhost:5000"
 
 # Page config
 st.set_page_config(
@@ -639,6 +639,16 @@ def enhanced_analytics_section():
 def core_analytics_section(filters):
     """Core analytics: time & business outcomes + summary"""
     st.markdown("### 📋 Time & Business Outcome Breakdown")
+    with st.expander("ℹ️ How categories are grouped"):
+        st.markdown("""
+    - **Booked** → Booked, ExistingPatient, AmendBooking, FollowUp  
+    - **Didn't Book** → PreferredSlotUnavailable, BookedElsewhere, WantsToThinkAboutIt, JustBrowsing, WantsToBookOnline, TooExpensive, TooFar, WrongService, Underage, DoesntWantToPayDeposit, CashOnlyClient  
+    - **Cancelled** → Cancellation, DiscontinuedBooking  
+    - **Pending** → CallBackRequest, PendingLink, 1stAttemptNA, 2ndAttemptNA, 3rdAttemptNA, 1stCallAttemptNA  
+    - **Informational** → HearingTestEnquiry, HearingAidEnquiry, ProductPurchaseEnquiry, Reviews, Consultation, HotHearingLead  
+    - **Issues** → ComplaintOrRefund, Complaint  
+    - **Invalid** → WrongNumber, DND, Marketing  
+        """)
 
     try:
         response = make_authenticated_request("/api/analytics/time-breakdown", "POST", filters)
@@ -649,45 +659,111 @@ def core_analytics_section(filters):
             total_calls = data["total_calls"]
 
             if total_calls > 0:
-                # Table
+                # Table with updated columns
                 df_data = []
                 for day, metrics in breakdown.items():
-                    if metrics["Morning"] + metrics["Afternoon"] + metrics["Evening"] > 0:
+                    if not day or day.strip() == "" or day == "**TOTALS**":
+                        continue
+                    total_day_calls = (metrics.get("Morning", 0) +
+                                       metrics.get("Afternoon", 0) +
+                                       metrics.get("Evening", 0))
+
+                    if total_day_calls < 2:
+                        print(f"[DEBUG] Skipping low-volume day: {day} ({total_day_calls} calls)")
+                        continue
+
+                    if total_day_calls > 0:
                         df_data.append({
                             "Day": day,
-                            "Morning": metrics["Morning"],
-                            "Afternoon": metrics["Afternoon"],
-                            "Evening": metrics["Evening"],
-                            "Didn't Book": metrics["Didn't Book"],
-                            "Cancelled": metrics["Cancelled"],
-                            "Other": metrics["Other"]
+                            "Morning": metrics.get("Morning", 0),
+                            "Afternoon": metrics.get("Afternoon", 0),
+                            "Evening": metrics.get("Evening", 0),
+                            "Booked": metrics.get("Booked", 0),
+                            "Didn't Book": metrics.get("Didn't Book", 0),
+                            "Cancelled": metrics.get("Cancelled", 0),
+                            "Pending": metrics.get("Pending", 0),
+                            "Info": metrics.get("Informational", 0),
+                            "Issues": metrics.get("Complaints", 0),
+                            "Invalid": metrics.get("Invalid", 0),
+                            "Other": metrics.get("Other", 0)
                         })
+
+                # Add totals row
                 df_data.append({
                     "Day": "**TOTALS**",
-                    "Morning": totals["Morning"],
-                    "Afternoon": totals["Afternoon"],
-                    "Evening": totals["Evening"],
-                    "Didn't Book": totals["Didn't Book"],
-                    "Cancelled": totals["Cancelled"],
-                    "Other": totals["Other"]
+                    "Morning": totals.get("Morning", 0),
+                    "Afternoon": totals.get("Afternoon", 0),
+                    "Evening": totals.get("Evening", 0),
+                    "Booked": totals.get("Booked", 0),
+                    "Didn't Book": totals.get("Didn't Book", 0),
+                    "Cancelled": totals.get("Cancelled", 0),
+                    "Pending": totals.get("Pending", 0),
+                    "Info": totals.get("Informational", 0),
+                    "Issues": totals.get("Complaints", 0),
+                    "Invalid": totals.get("Invalid", 0),
+                    "Other": totals.get("Other", 0)
                 })
 
                 df = pd.DataFrame(df_data)
+                print(df)
                 st.dataframe(df, use_container_width=True, hide_index=True)
 
-                # Quick Stats Cards
+                st.markdown("---")
+
+                # Enhanced Quick Stats Cards - 2 Rows
+                st.markdown("#### 📊 Key Metrics Overview")
+
+                # First row: Call volume & time distribution
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("Total Calls", total_calls)
                 with col2:
-                    cancel_rate = round((totals["Cancelled"] / total_calls) * 100, 1)
-                    st.metric("Cancellation Rate", f"{cancel_rate}%")
+                    morning_pct = round((totals.get("Morning", 0) / total_calls) * 100, 1) if total_calls > 0 else 0
+                    st.metric("Morning", f"{totals.get('Morning', 0)} ({morning_pct}%)")
                 with col3:
-                    lost_rate = round((totals["Didn't Book"] / total_calls) * 100, 1)
-                    st.metric("Lost Booking Rate", f"{lost_rate}%")
+                    afternoon_pct = round((totals.get("Afternoon", 0) / total_calls) * 100, 1) if total_calls > 0 else 0
+                    st.metric("Afternoon", f"{totals.get('Afternoon', 0)} ({afternoon_pct}%)")
                 with col4:
-                    success_rate = round((totals["Other"] / total_calls) * 100, 1)
-                    st.metric("Success Rate", f"{success_rate}%")
+                    evening_pct = round((totals.get("Evening", 0) / total_calls) * 100, 1) if total_calls > 0 else 0
+                    st.metric("Evening", f"{totals.get('Evening', 0)} ({evening_pct}%)")
+
+                # Second row: Business outcomes
+                col2, col3, col4 = st.columns(3)
+                with col2:
+                    cancel_rate = round((totals.get("Cancelled", 0) / total_calls) * 100, 1) if total_calls > 0 else 0
+                    st.metric("Cancellation", f"{totals.get("Cancelled", 0)} ({cancel_rate}%)")
+                with col3:
+                    lost_rate = round((totals.get("Didn't Book", 0) / total_calls) * 100, 1) if total_calls > 0 else 0
+                    st.metric("Lost Opportunity", f"{totals.get("Didn't Book", 0)} ({lost_rate}%)")
+                with col4:
+                    pending_count = totals.get("Pending", 0)
+                    st.metric("📞 Pending", pending_count)
+
+                # Alerts for concerning metrics
+                # alerts = []
+                #
+                # if totals.get("Morning", 0) == 0 and total_calls > 0:
+                #     alerts.append("⚠️ **No morning calls detected** - Verify data recording")
+                #
+                # if cancel_rate > 20:
+                #     alerts.append(f"🚨 **High cancellation rate**: {cancel_rate}% exceeds 20% threshold")
+                #
+                # if lost_rate > 25:
+                #     alerts.append(f"🚨 **High lost opportunity rate**: {lost_rate}% exceeds 25% threshold")
+                #
+                # if pending_count > 15:
+                #     alerts.append(f"📞 **{pending_count} pending callbacks** - Prioritize follow-ups")
+                #
+                # if totals.get("Complaints", 0) > 5:
+                #     alerts.append(
+                #         f"⚠️ **{totals.get('Complaints', 0)} complaints/issues** - Requires immediate attention")
+
+                # if alerts:
+                #     st.markdown("---")
+                #     st.markdown("#### 🚨 Action Items")
+                #     for alert in alerts:
+                #         st.warning(alert)
+
             else:
                 st.info("No data available for the selected filters.")
         else:
@@ -697,17 +773,17 @@ def core_analytics_section(filters):
 
     st.markdown("---")
 
-    # Summary Statistics
+    # Summary Statistics (Enhanced)
     st.markdown("### 📈 Key Performance Insights")
 
     try:
         response = make_authenticated_request("/api/analytics/summary-stats", "POST", filters)
         if response and response.status_code == 200:
             stats = response.json()
-            print(f"this is the summary : {stats}")
 
             if stats["total_calls"] > 0:
                 col1, col2 = st.columns(2)
+
                 with col1:
                     st.markdown("**📊 Peak Patterns:**")
                     st.write(f"• Peak Day: **{stats['peak_day']}**")
@@ -720,18 +796,153 @@ def core_analytics_section(filters):
                     st.write(f"• Cancellation Rate: **{stats['cancellation_rate']}%**")
                     st.write(f"• No Booking Rate: **{stats['no_booking_rate']}%**")
 
-                    if stats['cancellation_rate'] > 25:
-                        st.warning("High cancellation rate detected!")
-                    if stats['no_booking_rate'] > 30:
-                        st.warning("High booking loss rate detected!")
+                    if stats['cancellation_rate'] > 20:
+                        st.warning("⚠️ High cancellation rate detected!")
+                    if stats['no_booking_rate'] > 25:
+                        st.warning("⚠️ High booking loss rate detected!")
 
-                # Outcome Breakdown Chart
+                # Outcome Breakdown Chart (Updated with new categories)
                 if stats.get('outcome_breakdown'):
-                    outcome_df = pd.DataFrame(list(stats['outcome_breakdown'].items()),
-                                              columns=['Outcome', 'Count'])
-                    fig = px.pie(outcome_df, values='Count', names='Outcome',
-                                 title="Business Outcomes Distribution")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown("---")
+                    st.markdown("#### 📊 Business Outcomes Distribution")
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        # Pie chart with updated colors
+                        outcome_df = pd.DataFrame(
+                            list(stats['outcome_breakdown'].items()),
+                            columns=['Outcome', 'Count']
+                        )
+
+                        # Define colors for all outcomes
+                        color_map = {
+                            'Booked': '#28a745',  # Green
+                            "Didn't Book": '#dc3545',  # Red
+                            'Cancelled': '#ff6b6b',  # Light red
+                            'Pending': '#ffc107',  # Yellow/Amber
+                            'Informational': '#17a2b8',  # Cyan/Info blue
+                            'Complaints': '#fd7e14',  # Orange
+                            'Invalid': '#6c757d',  # Gray
+                            'Other': '#95a5a6'  # Light gray
+                        }
+
+                        fig = px.pie(
+                            outcome_df,
+                            values='Count',
+                            names='Outcome',
+                            title="Business Outcomes Distribution",
+                            color='Outcome',
+                            color_discrete_map=color_map,
+                            hole=0.3  # Donut chart for modern look
+                        )
+                        fig.update_traces(textposition='inside', textinfo='percent+label')
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    with col2:
+                        # Bar chart for better comparison
+                        outcome_df_sorted = outcome_df.sort_values('Count', ascending=False)
+                        fig_bar = px.bar(
+                            outcome_df_sorted,
+                            x='Outcome',
+                            y='Count',
+                            title="Outcome Counts (Sorted)",
+                            color='Outcome',
+                            color_discrete_map=color_map,
+                            text='Count'
+                        )
+                        fig_bar.update_traces(textposition='outside')
+                        fig_bar.update_layout(showlegend=False)
+                        st.plotly_chart(fig_bar, use_container_width=True)
+
+                # Time period analysis
+                if stats.get('time_breakdown'):
+                    st.markdown("---")
+                    st.markdown("#### ⏰ Call Volume by Time of Day")
+
+                    time_df = pd.DataFrame(
+                        list(stats['time_breakdown'].items()),
+                        columns=['Time Period', 'Count']
+                    )
+
+                    # Sort by count descending
+                    time_df = time_df.sort_values('Count', ascending=False)
+
+                    fig_time = px.bar(
+                        time_df,
+                        x='Time Period',
+                        y='Count',
+                        title="Calls by Time Period",
+                        color='Count',
+                        color_continuous_scale='Blues',
+                        text='Count'
+                    )
+                    fig_time.update_traces(textposition='outside')
+                    fig_time.update_layout(showlegend=False)
+                    st.plotly_chart(fig_time, use_container_width=True)
+
+                    # Smart insights
+                    if not time_df.empty and time_df['Count'].max() > 0:
+                        busiest = time_df.iloc[0]['Time Period']
+                        busiest_count = time_df.iloc[0]['Count']
+                        total_time_calls = time_df['Count'].sum()
+                        busiest_pct = round((busiest_count / total_time_calls) * 100, 1)
+
+                        st.info(
+                            f"💡 **Insight:** {busiest} is your busiest period with {busiest_count} calls ({busiest_pct}% of total). Consider optimizing staffing during this time.")
+
+                        # Check for morning calls issue
+                        morning_calls = time_df[time_df['Time Period'] == 'Morning']['Count'].sum()
+                        if morning_calls == 0 and total_time_calls > 0:
+                            st.error(
+                                "🚨 **Data Issue:** No morning calls recorded. Please verify your data collection process.")
+
+                # Location breakdown if available
+                if stats.get('location_breakdown'):
+                    st.markdown("---")
+                    st.markdown("#### 📍 Top Performing Locations")
+
+                    location_df = pd.DataFrame(
+                        list(stats['location_breakdown'].items()),
+                        columns=['Location', 'Count']
+                    )
+                    location_df = location_df.sort_values('Count', ascending=False).head(10)
+
+                    fig_loc = px.bar(
+                        location_df,
+                        x='Count',
+                        y='Location',
+                        orientation='h',
+                        title="Top 10 Locations by Call Volume",
+                        color='Count',
+                        color_continuous_scale='Greens',
+                        text='Count'
+                    )
+                    fig_loc.update_traces(textposition='outside')
+                    fig_loc.update_layout(showlegend=False, yaxis={'categoryorder': 'total ascending'})
+                    st.plotly_chart(fig_loc, use_container_width=True)
+
+                # Service breakdown if available
+                if stats.get('service_breakdown'):
+                    st.markdown("---")
+                    st.markdown("#### 🏥 Service Type Distribution")
+
+                    service_df = pd.DataFrame(
+                        list(stats['service_breakdown'].items()),
+                        columns=['Service', 'Count']
+                    )
+                    service_df = service_df.sort_values('Count', ascending=False)
+
+                    fig_service = px.pie(
+                        service_df,
+                        values='Count',
+                        names='Service',
+                        title="Calls by Service Type",
+                        hole=0.3
+                    )
+                    fig_service.update_traces(textposition='inside', textinfo='percent+label')
+                    st.plotly_chart(fig_service, use_container_width=True)
+
         else:
             st.error("Failed to load summary statistics")
     except Exception as e:
@@ -849,7 +1060,7 @@ def location_insights_section(filters):
 
             if exclusivity_data:
                 # Key Insights Metrics
-                col1, col2, col3 = st.columns(3)
+                col1, col2, = st.columns(2)
                 with col1:
                     st.metric("Total Exclusive Customers", insights["total_exclusive_customers"])
                 with col2:
@@ -857,11 +1068,11 @@ def location_insights_section(filters):
                         most_demanded = insights["most_exclusive_demand"]
                         st.metric("Highest Exclusive Demand", f"{most_demanded[0]}")
                         st.caption(f"{most_demanded[1]['exclusive_requests']} customers")
-                with col3:
-                    if insights["lowest_conversion"]:
-                        lowest_conv = insights["lowest_conversion"]
-                        st.metric("Needs Attention", f"{lowest_conv[0]}")
-                        st.caption(f"{lowest_conv[1]['conversion_rate']}% conversion")
+                # with col3:
+                #     if insights["lowest_conversion"]:
+                #         lowest_conv = insights["lowest_conversion"]
+                #         st.metric("Needs Attention", f"{lowest_conv[0]}")
+                #         st.caption(f"{lowest_conv[1]['conversion_rate']}% conversion")
 
                 # Create DataFrame for visualization
                 df_data = []
@@ -905,12 +1116,12 @@ def location_insights_section(filters):
                         st.write(
                             f"• **{row['Clinic']}**: {row['Exclusive Requests']} exclusive customers but only {row['Conversion Rate']}% conversion - urgent capacity expansion needed")
 
-                high_loyalty = df[df["Conversion Rate"] > 80]
-                if not high_loyalty.empty:
-                    st.success("⭐ **High Loyalty Locations:**")
-                    for _, row in high_loyalty.iterrows():
-                        st.write(
-                            f"• **{row['Clinic']}**: {row['Conversion Rate']}% conversion rate - excellent customer satisfaction")
+                # high_loyalty = df[df["Conversion Rate"] > 80]
+                # if not high_loyalty.empty:
+                #     st.success("⭐ **High Loyalty Locations:**")
+                #     for _, row in high_loyalty.iterrows():
+                #         st.write(
+                #             f"• **{row['Clinic']}**: {row['Conversion Rate']}% conversion rate - excellent customer satisfaction")
             else:
                 st.info("No location exclusivity data found for the selected filters. Try expanding your date range.")
         else:
