@@ -12,7 +12,7 @@ import json
 from collections import defaultdict
 
 # Configuration
-API_BASE_URL = "http://localhost:5000"
+API_BASE_URL = "https://medical-call-analytics-api.onrender.com"
 
 # Page config
 st.set_page_config(
