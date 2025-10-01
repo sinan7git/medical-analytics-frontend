@@ -428,27 +428,27 @@ def location_analytics_tab():
                 st.metric("Unique Questions", location_data["overview"]["total_unique_questions"])
 
             # Top locations display
-            st.markdown("##### 🏆 Top Performing Locations")
+            # st.markdown("##### 🏆 Top Performing Locations")
             top_locations = location_data.get("top_locations", {})
 
             if top_locations:
                 # Create location comparison table
-                location_comparison = []
-                for location_name, data in list(top_locations.items())[:10]:  # Top 10
-                    location_comparison.append({
-                        "Location": location_name,
-                        "Unique Questions": data["unique_questions_found"],
-                        "Uniqueness Rate": f"{(data['unique_questions_found'] / data['total_qa_pairs'] * 100):.1f}%" if
-                        data["total_qa_pairs"] > 0 else "0%",
-                        "Top Question": data["top_unique_question"]["question"][:40] + "..." if data[
-                                                                                                    "top_unique_question"] and
-                                                                                                data[
-                                                                                                    "top_unique_question"][
-                                                                                                    "question"] else "None"
-                    })
-
-                location_df = pd.DataFrame(location_comparison)
-                st.dataframe(location_df, use_container_width=True, hide_index=True)
+                # location_comparison = []
+                # for location_name, data in list(top_locations.items())[:10]:  # Top 10
+                #     location_comparison.append({
+                #         "Location": location_name,
+                #         "Unique Questions": data["unique_questions_found"],
+                #         "Uniqueness Rate": f"{(data['unique_questions_found'] / data['total_qa_pairs'] * 100):.1f}%" if
+                #         data["total_qa_pairs"] > 0 else "0%",
+                #         "Top Question": data["top_unique_question"]["question"][:40] + "..." if data[
+                #                                                                                     "top_unique_question"] and
+                #                                                                                 data[
+                #                                                                                     "top_unique_question"][
+                #                                                                                     "question"] else "None"
+                #     })
+                #
+                # location_df = pd.DataFrame(location_comparison)
+                # st.dataframe(location_df, use_container_width=True, hide_index=True)
 
                 # Location analysis controls
                 st.markdown("##### ⚙️ Location Analysis Controls")
@@ -542,22 +542,22 @@ def location_analytics_tab():
                                 impact_icon = impact_colors.get(uq["business_impact"], "⚪")
 
                                 with st.expander(
-                                        f"{impact_icon} {uq['canonical_question'][:60]}... (Asked {uq['frequency_count']} times)"):
-                                    col1, col2 = st.columns([3, 1])
+                                        f"{impact_icon} {uq['canonical_question'][:60]}..."):
+                                    col1, = st.columns([3])
 
                                     with col1:
                                         st.markdown(f"**🔍 Question:** {uq['canonical_question']}")
                                         st.markdown(f"**💬 Answer:** {uq['canonical_answer']}")
                                         st.markdown(f"**📂 Category:** {uq['category']}")
 
-                                    with col2:
-                                        st.metric("Frequency", uq['frequency_count'])
-                                        st.metric("Priority", f"{uq['priority_score']:.1f}")
-                                        st.write(f"**Impact:** {uq['business_impact'].title()}")
-                                        if uq.get('services_mentioned'):
-                                            st.write(f"**Services:** {', '.join(uq['services_mentioned'][:2])}")
+                                    # with col2:
+                                    #     st.metric("Frequency", uq['frequency_count'])
+                                    #     st.metric("Priority", f"{uq['priority_score']:.1f}")
+                                    #     st.write(f"**Impact:** {uq['business_impact'].title()}")
+                                    #     if uq.get('services_mentioned'):
+                                    #         st.write(f"**Services:** {', '.join(uq['services_mentioned'][:2])}")
 
-                                    st.info(f"💡 **Action:** {uq['recommended_action']}")
+                                    # st.info(f"💡 **Action:** {uq['recommended_action']}")
                         else:
                             st.info(f"No unique questions found for {selected_location}")
                     else:
