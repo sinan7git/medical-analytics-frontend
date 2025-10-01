@@ -157,6 +157,46 @@ def get_filter_options():
     return {"locations": [], "services": [], "categories": [], "time_frames": []}
 
 
+@st.fragment
+def enhanced_analytics_fragment():
+    enhanced_analytics_section()
+
+
+@st.fragment
+def summary_reports_fragment():
+    summary_reports_section()
+
+
+@st.fragment
+def qa_dashboard_fragment():
+    qa_analytics_section()
+
+
+@st.fragment
+def qa_unique_questions_fragment():
+    unique_questions_management()
+
+
+@st.fragment
+def qa_insights_charts_fragment():
+    qa_insights_charts()
+
+
+@st.fragment
+def service_location_fragment():
+    service_location_qa_management()
+
+
+@st.fragment
+def basic_insights_fragment():
+    basic_insights_section()
+
+
+@st.fragment
+def enhanced_chat_fragment():
+    enhanced_chat_section()
+
+
 def dashboard_page():
     st.title("🏥 Medical Call Analytics")
 
@@ -169,31 +209,22 @@ def dashboard_page():
             del st.session_state[key]
         st.rerun()
 
-    # Main tabs
+    # Manager view
     if st.session_state.user_role == "manager":
         tab1, tab3, tab5, tab6 = st.tabs([
             "📊 Business Analytics",
-            # "🤖 AI Intelligence",
             "📋 Summary Reports",
-            # "📈 Executive Reports",
             "❓ Q&A",
             "🛠️ Q&A Service & Location"
         ])
 
         with tab1:
-            enhanced_analytics_section()
-
-        # with tab2:
-        #     enhanced_chat_section()
+            enhanced_analytics_fragment()
 
         with tab3:
-            summary_reports_section()
-
-        # with tab4:
-        #     executive_reports_section()
+            summary_reports_fragment()
 
         with tab5:
-            # Q&A Intelligence sub-tabs
             qa_subtab1, qa_subtab2, qa_subtab3 = st.tabs([
                 "📊 Dashboard",
                 "🔍 Manage Unique Questions",
@@ -201,27 +232,26 @@ def dashboard_page():
             ])
 
             with qa_subtab1:
-                qa_analytics_section()
+                qa_dashboard_fragment()
 
             with qa_subtab2:
-                unique_questions_management()
+                qa_unique_questions_fragment()
 
             with qa_subtab3:
-                qa_insights_charts()
+                qa_insights_charts_fragment()
+
         with tab6:
-            service_location_qa_management()
+            service_location_fragment()
 
-
-
+    # Staff / Receptionist view
     else:
-        # Receptionist/Staff view
         tab1, tab2 = st.tabs(["📞 Call Insights", "🤖 AI Assistant"])
 
         with tab1:
-            basic_insights_section()
+            basic_insights_fragment()
 
         with tab2:
-            enhanced_chat_section()
+            enhanced_chat_fragment()
 
 
 def service_location_qa_management():
@@ -649,7 +679,7 @@ def core_analytics_section(filters):
     - **Issues** → ComplaintOrRefund, Complaint  
     - **Invalid** → WrongNumber, DND, Marketing  
         """)
-
+    df_data = []
     try:
         response = make_authenticated_request("/api/analytics/time-breakdown", "POST", filters)
         if response and response.status_code == 200:
@@ -659,8 +689,6 @@ def core_analytics_section(filters):
             total_calls = data["total_calls"]
 
             if total_calls > 0:
-                # Table with updated columns
-                df_data = []
                 for day, metrics in breakdown.items():
                     if not day or day.strip() == "" or day == "**TOTALS**":
                         continue
