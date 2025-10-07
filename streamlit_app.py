@@ -50,15 +50,17 @@ def is_token_valid():
     return True
 
 
-def make_authenticated_request(endpoint, method="GET", data=None):
+def make_authenticated_request(endpoint, method="GET", data=None, params=None):
     headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
     url = f"{API_BASE_URL}{endpoint}"
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, params=params)
         elif method == "POST":
-            response = requests.post(url, json=data, headers=headers)
+            response = requests.post(url, json=data, headers=headers, params=params)  # ⭐ Added params
+        elif method == "DELETE":
+            response = requests.delete(url, headers=headers, params=params)
 
         if response.status_code == 401:
             st.session_state.authenticated = False
@@ -188,6 +190,11 @@ def service_location_fragment():
 
 
 @st.fragment
+def official_faq_fragment():
+    official_faq_management()
+
+
+@st.fragment
 def basic_insights_fragment():
     basic_insights_section()
 
@@ -211,11 +218,13 @@ def dashboard_page():
 
     # Manager view
     if st.session_state.user_role == "manager":
-        tab1, tab3, tab5, tab6 = st.tabs([
+        tab1, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "📊 Business Analytics",
             "📋 Summary Reports",
+            "👨‍⚕️ Receptionist Performance",
             "❓ Q&A",
-            "🛠️ Q&A Service & Location"
+            "🛠️ Q&A Service & Location",
+            "📚 Official FAQs"
         ])
 
         with tab1:
@@ -223,6 +232,8 @@ def dashboard_page():
 
         with tab3:
             summary_reports_fragment()
+        with tab4:
+            receptionist_performance_section()
 
         with tab5:
             qa_subtab1, qa_subtab2, qa_subtab3 = st.tabs([
@@ -242,6 +253,8 @@ def dashboard_page():
 
         with tab6:
             service_location_fragment()
+        with tab7:
+            official_faq_fragment()
 
     # Staff / Receptionist view
     else:
@@ -252,6 +265,20 @@ def dashboard_page():
 
         with tab2:
             enhanced_chat_fragment()
+
+
+def is_already_official(question: str) -> bool:
+    result = make_authenticated_request(
+        "/api/official-faq/check-exists",
+        "GET",
+        params={"question": question}
+    )
+
+    if result and result.status_code == 200:
+        data = result.json()
+        return data.get("exists", False)
+
+    return False
 
 
 def service_location_qa_management():
@@ -415,6 +442,28 @@ def service_analytics_tab():
                                         st.metric("Frequency", uq['frequency_count'])
                                         st.metric("Priority", f"{uq['priority_score']:.1f}")
                                         st.write(f"**Impact:** {uq['business_impact'].title()}")
+                                        if st.button("✅ Add Official FAQ", key=f"service_official_{uq['id']}",
+                                                     type="primary"):
+                                            result = make_authenticated_request(
+                                                "/api/official-faq/add",
+                                                "POST",
+                                                {
+                                                    "question": uq['canonical_question'],
+                                                    "answer": uq['canonical_answer'],
+                                                    "category": uq['category'],
+                                                    "business_impact": uq['business_impact'],
+                                                    "frequency_count": uq['frequency_count'],
+                                                    "priority_score": uq['priority_score'],
+                                                    "source_type": "service",
+                                                    "source_id": uq['id']
+                                                }
+                                            )
+
+                                            if result and result.status_code == 200:
+                                                st.success("✅ Added!")
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Failed")
 
                                     st.info(f"💡 **Action:** {uq['recommended_action']}")
                         else:
@@ -432,6 +481,97 @@ def service_analytics_tab():
 
     except Exception as e:
         st.error(f"Error loading service analytics: {e}")
+
+
+def official_faq_management():
+    """Manage Official FAQs - View, Add, Delete"""
+    st.markdown("### 📚 Official FAQ Management")
+
+    tab1, tab2 = st.tabs(["📋 View Official FAQs", "➕ Add New FAQ"])
+
+    with tab1:
+        # Display existing official FAQs
+        response = make_authenticated_request("/api/official-faq/list", "GET")
+
+        if response and response.status_code == 200:
+            data = response.json()
+            faqs = data.get("faqs", [])
+
+            if faqs:
+                st.write(f"**Total Official FAQs:** {len(faqs)}")
+
+                for faq in faqs:
+                    with st.expander(f"❓ {faq['question'][:60]}..."):
+                        st.markdown(f"**Question:** {faq['question']}")
+                        st.markdown(f"**Official Answer:** {faq['official_answer']}")
+                        st.markdown(f"**Category:** {faq['category']}")
+                        st.markdown(f"**Source:** {faq['source_type'].title()}")
+                        st.markdown(f"**Added by:** {faq['created_by']}")
+
+                        if st.button("🗑️ Delete", key=f"delete_faq_{faq['id']}", type="secondary"):
+                            delete_result = make_authenticated_request(
+                                f"/api/official-faq/delete/{faq['id']}",
+                                "DELETE"
+                            )
+
+                            if delete_result and delete_result.status_code == 200:
+                                st.success("✅ Deleted!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Delete failed")
+            else:
+                st.info("No official FAQs added yet.")
+        else:
+            st.error("Failed to load official FAQs")
+
+    with tab2:
+        # Manual FAQ entry form
+        st.markdown("#### ➕ Add New Official FAQ Manually")
+
+        with st.form("manual_faq_form"):
+            question = st.text_area("Question", height=100, placeholder="What are your clinic hours?")
+            answer = st.text_area("Official Answer", height=150, placeholder="We are open Monday-Friday, 9 AM to 5 PM")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                category = st.selectbox(
+                    "Category",
+                    ["Hours", "Services", "Location", "Pricing", "Booking", "Cancellation", "Other"]
+                )
+            with col2:
+                business_impact = st.selectbox(
+                    "Business Impact",
+                    ["high", "medium", "low", "minimal"]
+                )
+
+            submit = st.form_submit_button("💾 Save Official FAQ", type="primary")
+
+            if submit:
+                if not question or not answer:
+                    st.error("❌ Please fill in both question and answer")
+                else:
+                    result = make_authenticated_request(
+                        "/api/official-faq/add",
+                        "POST",
+                        {
+                            "question": question.strip(),
+                            "answer": answer.strip(),
+                            "category": category,
+                            "business_impact": business_impact,
+                            "frequency_count": 1,
+                            "priority_score": 10.0,
+                            "source_type": "manual",
+                            "source_id": None
+                        }
+                    )
+
+                    if result and result.status_code == 200:
+                        st.success("✅ Official FAQ added successfully!")
+                        st.rerun()
+                    elif result and result.status_code == 400:
+                        st.warning("⚠️ This question already exists")
+                    else:
+                        st.error("❌ Failed to add FAQ")
 
 
 def location_analytics_tab():
@@ -579,6 +719,28 @@ def location_analytics_tab():
                                         st.markdown(f"**🔍 Question:** {uq['canonical_question']}")
                                         st.markdown(f"**💬 Answer:** {uq['canonical_answer']}")
                                         st.markdown(f"**📂 Category:** {uq['category']}")
+                                        if st.button("✅ Add Official FAQ", key=f"location_official_{uq['id']}",
+                                                     type="primary"):
+                                            result = make_authenticated_request(
+                                                "/api/official-faq/add",
+                                                "POST",
+                                                {
+                                                    "question": uq['canonical_question'],
+                                                    "answer": uq['canonical_answer'],
+                                                    "category": uq['category'],
+                                                    "business_impact": uq['business_impact'],
+                                                    "frequency_count": uq['frequency_count'],
+                                                    "priority_score": uq['priority_score'],
+                                                    "source_type": "service",
+                                                    "source_id": uq['id']
+                                                }
+                                            )
+
+                                            if result and result.status_code == 200:
+                                                st.success("✅ Added!")
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Failed")
 
                                     # with col2:
                                     #     st.metric("Frequency", uq['frequency_count'])
@@ -614,8 +776,7 @@ def enhanced_analytics_section():
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        default_from_date = date(2025, 4, 30)
-        date_from = st.date_input("From Date", default_from_date, key="date_from")
+        date_from = st.date_input("From Date", datetime.now() - timedelta(days=30), key="date_from")
     with col2:
         date_to = st.date_input("To Date", datetime.now(), key="date_to")
     with col3:
@@ -1974,6 +2135,284 @@ def executive_overview_section():
         st.error(f"Error loading executive dashboard: {e}")
 
 
+def receptionist_performance_section():
+    st.markdown("### 👨‍⚕️ Receptionist Performance Reports")
+
+    receptionist_response = make_authenticated_request("/api/receptionists/list", "GET")
+
+    if receptionist_response and receptionist_response.status_code == 200:
+        receptionists = receptionist_response.json().get("receptionists", [])
+        print(f"recep {receptionists}")
+
+        tab1, tab2 = st.tabs(["🚀 Generate New Report", "📊 View Past Reports"])
+
+        with tab1:
+            st.markdown("#### Generate Performance Report")
+
+            target_date = st.date_input(
+                "Select Date",
+                value=datetime.now().date() - timedelta(days=1),
+                max_value=datetime.now().date()
+            )
+
+            selected_receptionist = st.selectbox(
+                "Receptionist ",
+                ["Choose a Receptionist"] + receptionists
+            )
+            print(receptionists)
+
+            if st.button("🚀 Generate Report", use_container_width=True, type="primary"):
+                receptionist_param = None if selected_receptionist == "All" else selected_receptionist
+
+                with st.spinner(f"🤖 Analyzing performance for {target_date}..."):
+                    response = make_authenticated_request(
+                        "/api/summaries/generate-daily-receptionist",
+                        "POST",
+                        params={
+                            "target_date": str(target_date),
+                            "receptionist_name": receptionist_param
+                        }
+                    )
+
+                    # Check if response object exists first
+                    if response is None:
+                        st.error("❌ Failed to connect to the server. Please check your connection.")
+
+                    elif response.status_code == 200:
+                        result = response.json()
+                        st.success(f"✅ Report generated for {result['receptionists_analyzed']} receptionist(s)!")
+
+                        for perf in result["results"]:
+                            with st.expander(
+                                    f"👤 {perf['receptionist_name']} - {perf['correctness_percentage']:.1f}% Correct",
+                                    expanded=True
+                            ):
+                                col1, col2, col3, col4 = st.columns(4)
+
+                                with col1:
+                                    st.metric("Total Calls", perf['total_calls'])
+                                with col2:
+                                    st.metric("Questions", perf['total_questions'])
+                                with col3:
+                                    st.metric("✅ Correct", perf['correct_answers'])
+                                with col4:
+                                    st.metric("❌ Incorrect", perf['incorrect_answers'])
+
+                                st.markdown("---")
+                                st.markdown(f"**Summary:** {perf['summary']}")
+
+                                if perf.get('insights'):
+                                    st.markdown("---")
+                                    st.markdown("**📊 Performance Insights:**")
+                                    insights = perf['insights']
+
+                                    if insights.get('strengths'):
+                                        st.success("**💪 Strengths:**")
+                                        for strength in insights['strengths']:
+                                            st.write(f"  • {strength}")
+
+                                    if insights.get('areas_for_improvement'):
+                                        st.warning("**⚠️ Areas for Improvement:**")
+                                        for area in insights['areas_for_improvement']:
+                                            st.write(f"  • {area}")
+
+                                if perf.get('questions'):
+                                    st.markdown("---")
+                                    st.markdown(f"**❓ Questions Answered ({len(perf['questions'])} total):**")
+
+                                    col_filter1, col_filter2 = st.columns(2)
+
+                                    with col_filter1:
+                                        filter_evaluation = st.selectbox(
+                                            "Filter by Evaluation",
+                                            ["All", "Correct", "Incorrect", "Partially Correct"],
+                                            key=f"filter_eval_{perf['receptionist_name']}"
+                                        )
+
+                                    with col_filter2:
+                                        search_query = st.text_input(
+                                            "Search questions",
+                                            key=f"search_{perf['receptionist_name']}",
+                                            placeholder="Type to search..."
+                                        )
+
+                                    filtered_questions = perf['questions']
+
+                                    if filter_evaluation != "All":
+                                        filtered_questions = [
+                                            q for q in filtered_questions
+                                            if q.get('evaluation', '').lower() == filter_evaluation.lower()
+                                        ]
+
+                                    if search_query:
+                                        filtered_questions = [
+                                            q for q in filtered_questions
+                                            if search_query.lower() in q.get('question', '').lower()
+                                        ]
+
+                                    st.write(
+                                        f"*Showing {len(filtered_questions)} of {len(perf['questions'])} questions*")
+
+                                    for idx, question in enumerate(filtered_questions, 1):
+                                        eval_status = question.get('evaluation', 'unknown').lower()
+
+                                        if eval_status == 'correct':
+                                            eval_color = "🟢"
+                                            eval_label = "Correct"
+                                        elif eval_status == 'incorrect':
+                                            eval_color = "🔴"
+                                            eval_label = "Incorrect"
+                                        elif eval_status == 'partially correct':
+                                            eval_color = "🟡"
+                                            eval_label = "Partially Correct"
+                                        else:
+                                            eval_color = "⚪"
+                                            eval_label = "Unknown"
+
+                                        with st.container():
+                                            st.markdown(f"**{idx}. {eval_color} {eval_label}**")
+                                            st.markdown(f"**Q:** {question.get('question', 'N/A')}")
+                                            st.markdown(
+                                                f"**Receptionist's Answer:** {question.get('receptionist_answer', 'N/A')}")
+                                            st.markdown(
+                                                f"**Official Answer:** {question.get('official_answer', 'N/A')}")
+
+                                            if question.get('explanation'):
+                                                st.info(f"**Explanation:** {question['explanation']}")
+
+                                            st.markdown("---")
+
+                    elif response.status_code == 404:
+                        # Handle "No Q&A pairs found" error
+                        try:
+                            error_detail = response.json().get("detail",
+                                                               "No Q&A pairs found for the selected date/receptionist")
+                        except:
+                            error_detail = "No Q&A pairs found for the selected date/receptionist"
+
+                        st.warning(f"⚠️ {error_detail}")
+                        st.info(
+                            "💡 **Tip:** Try selecting a different date or receptionist, or ensure calls have been processed for this date.")
+
+                    elif response.status_code == 400:
+                        # Handle "No official FAQs" or other bad request errors
+                        try:
+                            error_detail = response.json().get("detail", "Invalid request or missing data")
+                        except:
+                            error_detail = "Invalid request or missing data"
+
+                        st.warning(f"⚠️ {error_detail}")
+                        if "official" in error_detail.lower() or "faq" in error_detail.lower():
+                            st.info(
+                                "💡 **Action Required:** Please add official FAQs in the FAQ Management section before generating reports.")
+
+                    elif response.status_code == 500:
+                        # Handle server errors
+                        try:
+                            error_detail = response.json().get("detail", "Internal server error occurred")
+                        except:
+                            error_detail = "Internal server error occurred"
+
+                        st.error(f"❌ Failed to generate report: {error_detail}")
+                        st.info("💡 Please contact your system administrator or try again later.")
+
+                    else:
+                        # Handle any other unexpected status codes
+                        try:
+                            error_detail = response.json().get("detail",
+                                                               f"Unexpected error (Status: {response.status_code})")
+                        except:
+                            error_detail = f"Unexpected error (Status: {response.status_code})"
+
+                        st.error(f"❌ {error_detail}")
+
+        with tab2:
+            st.markdown("#### View Past Reports")
+
+            filter_receptionist = st.selectbox(
+                "Filter by Receptionist",
+                ["All"] + receptionists,
+                key="filter_receptionist"
+            )
+
+            date_range = st.date_input(
+                "Date Range",
+                value=(datetime.now().date() - timedelta(days=7), datetime.now().date()),
+                max_value=datetime.now().date()
+            )
+
+            if st.button("🔍 Load Reports", use_container_width=True):
+                params = {
+                    "receptionist_name": None if filter_receptionist == "All" else filter_receptionist,
+                    "date_from": str(date_range[0]) if len(date_range) > 0 else None,
+                    "date_to": str(date_range[1]) if len(date_range) > 1 else None
+                }
+
+                response = make_authenticated_request(
+                    "/api/summaries/receptionist-performance",
+                    "GET",
+                    params
+                )
+
+                if response and response.status_code == 200:
+                    data = response.json()
+                    summaries = data.get("summaries", [])
+
+                    if summaries:
+                        st.write(f"**Found {len(summaries)} report(s)**")
+
+                        for summary in summaries:
+                            with st.expander(
+                                    f"📅 {summary['date']} - {summary['receptionist_name']} ({summary['correctness_percentage']:.1f}%)"
+                            ):
+                                col1, col2, col3 = st.columns(3)
+
+                                with col1:
+                                    st.metric("Calls", summary['total_calls'])
+                                    st.metric("Questions", summary['total_questions_answered'])
+
+                                with col2:
+                                    st.metric("✅ Correct", summary['correct_answers'])
+                                    st.metric("❌ Incorrect", summary['incorrect_answers'])
+
+                                with col3:
+                                    accuracy_color = "🟢" if summary['correctness_percentage'] >= 80 else "🟡" if summary[
+                                                                                                                    'correctness_percentage'] >= 60 else "🔴"
+                                    st.metric(f"{accuracy_color} Accuracy", f"{summary['correctness_percentage']:.1f}%")
+
+                                st.markdown("---")
+                                st.markdown(f"**Summary:** {summary['summary_text']}")
+
+                                if summary.get('performance_insights'):
+                                    insights = summary['performance_insights']
+
+                                    if insights.get('strengths'):
+                                        st.success("**Strengths:**")
+                                        for strength in insights['strengths']:
+                                            st.write(f"  • {strength}")
+
+                                    if insights.get('areas_for_improvement'):
+                                        st.warning("**Areas for Improvement:**")
+                                        for area in insights['areas_for_improvement']:
+                                            st.write(f"  • {area}")
+
+                                    if insights.get('examples'):
+                                        st.markdown("**Examples:**")
+                                        for example in insights['examples'][:3]:  # Show top 3
+                                            eval_color = "🟢" if example['evaluation'] == 'correct' else "🔴" if example[
+                                                                                                                   'evaluation'] == 'incorrect' else "🟡"
+                                            st.markdown(f"{eval_color} **Q:** {example['question']}")
+                                            st.markdown(f"  **Given:** {example.get('receptionist_answer', 'N/A')}")
+                                            st.markdown(f"  **Should be:** {example.get('official_answer', 'N/A')}")
+                                            st.markdown("---")
+                    else:
+                        st.info("No reports found for selected filters")
+                else:
+                    st.error("Failed to load reports")
+    else:
+        st.error("Failed to load receptionists list")
+
+
 def qa_analytics_section():
     """Q&A Analytics section for managers"""
     st.subheader("🤖 Q&A Intelligence Dashboard")
@@ -2143,6 +2582,34 @@ def unique_questions_management():
                             st.metric("Priority Score", f"{uq['priority_score']:.1f}")
                             st.write(f"**Impact:** {uq['business_impact'].title()}")
                             st.write(f"**Similarity:** {uq['avg_similarity_score']:.3f}")
+                            if st.button(
+                                    "✅ Add as Official FAQ",
+                                    key=f"official_{uq['id']}",
+                                    type="primary"
+                            ):
+                                # Direct save to official FAQs
+                                result = make_authenticated_request(
+                                    "/api/official-faq/add",
+                                    "POST",
+                                    {
+                                        "question": uq['canonical_question'],
+                                        "answer": uq['canonical_answer'],
+                                        "category": uq['category'],
+                                        "business_impact": uq['business_impact'],
+                                        "frequency_count": uq['frequency_count'],
+                                        "priority_score": uq['priority_score'],
+                                        "source_type": "general",  # or 'location'/'service' based on context
+                                        "source_id": uq['id']
+                                    }
+                                )
+
+                                if result and result.status_code == 200:
+                                    st.success("✅ Added to Official FAQs!")
+                                    st.rerun()
+                                elif result and result.status_code == 400:
+                                    st.warning("⚠️ This question already exists in Official FAQs")
+                                else:
+                                    st.error("❌ Failed to add to Official FAQs")
 
                             if uq.get('locations_asked'):
                                 st.write(f"**Locations:** {', '.join(uq['locations_asked'][:3])}")
