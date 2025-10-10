@@ -58,7 +58,9 @@ def make_authenticated_request(endpoint, method="GET", data=None, params=None):
         if method == "GET":
             response = requests.get(url, headers=headers, params=params)
         elif method == "POST":
-            response = requests.post(url, json=data, headers=headers, params=params)  # ⭐ Added params
+            response = requests.post(url, json=data, headers=headers, params=params)
+        elif method == "PUT":
+            response = requests.put(url, json=data, headers=headers, params=params)
         elif method == "DELETE":
             response = requests.delete(url, headers=headers, params=params)
 
@@ -484,13 +486,15 @@ def service_analytics_tab():
 
 
 def official_faq_management():
-    """Manage Official FAQs - View, Add, Delete"""
     st.markdown("### 📚 Official FAQ Management")
+
+    # Initialize session state for editing
+    if 'editing_faq_id' not in st.session_state:
+        st.session_state.editing_faq_id = None
 
     tab1, tab2 = st.tabs(["📋 View Official FAQs", "➕ Add New FAQ"])
 
     with tab1:
-        # Display existing official FAQs
         response = make_authenticated_request("/api/official-faq/list", "GET")
 
         if response and response.status_code == 200:
@@ -502,23 +506,104 @@ def official_faq_management():
 
                 for faq in faqs:
                     with st.expander(f"❓ {faq['question'][:60]}..."):
-                        st.markdown(f"**Question:** {faq['question']}")
-                        st.markdown(f"**Official Answer:** {faq['official_answer']}")
-                        st.markdown(f"**Category:** {faq['category']}")
-                        st.markdown(f"**Source:** {faq['source_type'].title()}")
-                        st.markdown(f"**Added by:** {faq['created_by']}")
+                        if st.session_state.editing_faq_id == faq['id']:
+                            # EDIT MODE
+                            st.markdown("#### ✏️ Editing FAQ")
 
-                        if st.button("🗑️ Delete", key=f"delete_faq_{faq['id']}", type="secondary"):
-                            delete_result = make_authenticated_request(
-                                f"/api/official-faq/delete/{faq['id']}",
-                                "DELETE"
-                            )
+                            with st.form(f"edit_faq_form_{faq['id']}"):
+                                edited_question = st.text_area(
+                                    "Question",
+                                    value=faq['question'],
+                                    height=100
+                                )
+                                edited_answer = st.text_area(
+                                    "Official Answer",
+                                    value=faq['official_answer'],
+                                    height=150
+                                )
 
-                            if delete_result and delete_result.status_code == 200:
-                                st.success("✅ Deleted!")
-                                st.rerun()
-                            else:
-                                st.error("❌ Delete failed")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    edited_category = st.selectbox(
+                                        "Category",
+                                        ["Hours", "Services", "Location", "Pricing", "Booking", "Cancellation",
+                                         "Other"],
+                                        index=["Hours", "Services", "Location", "Pricing", "Booking", "Cancellation",
+                                               "Other"].index(faq['category']) if faq['category'] in ["Hours",
+                                                                                                      "Services",
+                                                                                                      "Location",
+                                                                                                      "Pricing",
+                                                                                                      "Booking",
+                                                                                                      "Cancellation",
+                                                                                                      "Other"] else 6
+                                    )
+                                with col2:
+                                    edited_business_impact = st.selectbox(
+                                        "Business Impact",
+                                        ["high", "medium", "low", "minimal"],
+                                        index=["high", "medium", "low", "minimal"].index(
+                                            faq.get('business_impact', 'medium'))
+                                    )
+
+                                col_save, col_cancel = st.columns(2)
+                                with col_save:
+                                    save_button = st.form_submit_button("💾 Save Changes", type="primary")
+                                with col_cancel:
+                                    cancel_button = st.form_submit_button("❌ Cancel", type="secondary")
+
+                                if save_button:
+                                    if not edited_question or not edited_answer:
+                                        st.error("❌ Question and answer cannot be empty")
+                                    else:
+                                        update_result = make_authenticated_request(
+                                            f"/api/official-faq/update/{faq['id']}",
+                                            "PUT",
+                                            {
+                                                "question": edited_question.strip(),
+                                                "answer": edited_answer.strip(),
+                                                "category": edited_category,
+                                                "business_impact": edited_business_impact
+                                            }
+                                        )
+
+                                        if update_result and update_result.status_code == 200:
+                                            st.success("✅ FAQ updated successfully!")
+                                            st.session_state.editing_faq_id = None
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ Failed to update FAQ")
+
+                                if cancel_button:
+                                    st.session_state.editing_faq_id = None
+                                    st.rerun()
+
+                        else:
+                            # VIEW MODE
+                            st.markdown(f"**Question:** {faq['question']}")
+                            st.markdown(f"**Official Answer:** {faq['official_answer']}")
+                            st.markdown(f"**Category:** {faq['category']}")
+                            st.markdown(f"**Business Impact:** {faq.get('business_impact', 'N/A').title()}")
+                            st.markdown(f"**Source:** {faq['source_type'].title()}")
+                            st.markdown(f"**Added by:** {faq['created_by']}")
+
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button("✏️ Edit", key=f"edit_faq_{faq['id']}", type="primary"):
+                                    st.session_state.editing_faq_id = faq['id']
+                                    st.rerun()
+
+                            with col2:
+                                if st.button("🗑️ Delete", key=f"delete_faq_{faq['id']}", type="secondary"):
+                                    delete_result = make_authenticated_request(
+                                        f"/api/official-faq/delete/{faq['id']}",
+                                        "DELETE"
+                                    )
+
+                                    if delete_result and delete_result.status_code == 200:
+                                        st.success("✅ Deleted!")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Delete failed")
             else:
                 st.info("No official FAQs added yet.")
         else:
