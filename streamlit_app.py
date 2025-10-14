@@ -887,6 +887,7 @@ def enhanced_analytics_section():
         "category": category if category != "All" else None,
         "time_frame": time_frame
     }
+    print(filters)
 
     st.session_state.current_filters = filters
 
@@ -915,6 +916,8 @@ def enhanced_analytics_section():
 def core_analytics_section(filters):
     """Core analytics: time & business outcomes + summary"""
     st.markdown("### 📋 Time & Business Outcome Breakdown")
+    is_single_day = (filters.get("date_from") == filters.get("date_to"))
+
     with st.expander("ℹ️ How categories are grouped"):
         st.markdown("""
     - **Booked** → Booked, ExistingPatient, AmendBooking, FollowUp  
@@ -942,7 +945,7 @@ def core_analytics_section(filters):
                                        metrics.get("Afternoon", 0) +
                                        metrics.get("Evening", 0))
 
-                    if total_day_calls < 2:
+                    if not is_single_day and total_day_calls < 2:
                         print(f"[DEBUG] Skipping low-volume day: {day} ({total_day_calls} calls)")
                         continue
 
@@ -979,6 +982,8 @@ def core_analytics_section(filters):
                 })
 
                 df = pd.DataFrame(df_data)
+                if is_single_day:
+                    st.info(f"📅 Showing data for: **{filters['date_from']}**")
                 print(df)
                 st.dataframe(df, use_container_width=True, hide_index=True)
 
